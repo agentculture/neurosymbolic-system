@@ -12,11 +12,14 @@ from __future__ import annotations
 _ROOT = """\
 # neurosymbolic-system
 
-A clonable template for AgentCulture mesh agents. It carries an agent-first CLI
-(cited from the teken `python-cli` reference), a mesh identity (`culture.yaml` +
-`CLAUDE.md`), the canonical guildmaster skill kit under `.claude/skills/`, and a
-buildable/deployable package baseline. Clone it, rename the package, edit
-`culture.yaml`, and you have a new agent.
+The runtime that lets agents control robots — senses, rules, arbitration and
+motion composed onto one 50 Hz tick, imported as a library by robot CLIs such as
+`reachy-mini-cli` and `microduck-cli`. Extracted from `reachy-mini-cli`; the
+runtime modules have not landed yet, so what ships today is the agent baseline:
+an agent-first CLI (cited from the teken `python-cli` reference), a mesh identity
+(`culture.yaml` + `AGENTS.colleague.md`), the guildmaster skill kit under
+`.claude/skills/`, and a buildable/deployable package baseline. `CLAUDE.md`
+carries the architecture brief.
 
 ## Verbs
 

@@ -18,7 +18,7 @@ description: >
 five core PR-lifecycle verbs — `lint`, `open`, `read`, `reply`,
 `delta`. Steward used to vendor parallel scripts for each; in 0.12.0
 those vendored copies were dropped in favor of delegating to `devex`.
-What's left in this skill is **the steward-specific gating layer**:
+What's left in this skill is **the gating layer inherited from steward**:
 
 - `status` — SonarCloud quality gate, OPEN issues, hotspots, deploy
   preview URL, unresolved-inline-thread tally.
@@ -142,7 +142,7 @@ help` mirrors the verb table when you need the steward-flavored
 extensions (`status`, `await`) on top.
 
 Branch naming: `fix/<desc>`, `feat/<desc>`, `docs/<desc>`,
-`skill/<name>`. PR / comment signature: `- <nick> (Claude)`, where
+`skill/<name>`, `extract/<module>` (a port out of `reachy-mini-cli`). PR / comment signature: `- <nick> (Claude)`, where
 `<nick>` is resolved by `devex` from the agent's own `culture.yaml`
 (first agent's `suffix`), falling back to the git-repo basename. devex
 auto-appends the signature on `pr open` and `pr reply` only when the
@@ -163,14 +163,19 @@ only when the user explicitly asks for one of them.
 
 For every comment, decide **FIX** or **PUSHBACK** with reasoning.
 
-Default to **FIX** for: portability complaints (always valid for
-Steward — recurring bug class), test or doc requests, style nits
-aligned with workspace conventions.
+Default to **FIX** for: portability complaints (always valid here —
+recurring bug class), test or doc requests, style nits aligned with
+workspace conventions.
 
 Default to **PUSHBACK** for: architecture opinions that conflict with
-workspace `CLAUDE.md` or the all-backends rule; greenfield
-false-positives (e.g. "add tests" before there's any source — defer
-to a later PR, don't refuse).
+the workspace `CLAUDE.md`, or with this repo's tick invariants — the
+engine never importing its seam consumers, drop-don't-block on the 20 ms
+budget, fail-closed validation, rules-as-data, and no third-party
+runtime dependency. Those are paid-for constraints (see the donor
+evidence cited in `CLAUDE.md`), not preferences; cite the constraint in
+the reply rather than relitigating it. Still-greenfield
+false-positives ("add tests for the runtime" before the module is
+extracted) get a defer-to-a-later-PR reply, not a refusal.
 
 ### Alignment-delta rule
 
@@ -179,20 +184,32 @@ If the PR touches `CLAUDE.md`, `culture.yaml`, or anything under
 PUSHBACK on each comment. Note any sibling that needs a follow-up PR
 and mention it in your reply.
 
-## Greenfield-aware steps
+## Before you open a PR
 
-The lint and the workflow script are always-on. Stack-specific steps
-are conditional and currently no-op (greenfield repo):
+The lint and the workflow script are always-on. This repo's stack is
+live, so all of these run for real — run them before `workflow.sh
+open`, not after:
 
 ```bash
-[ -d tests ] && [ -f pyproject.toml ] && uv run pytest tests/ -x -q
-[ -f pyproject.toml ] && bump_version_per_project_convention   # see project README
-[ -f .markdownlint-cli2.yaml ] && markdownlint-cli2 "$(git diff --name-only --cached '*.md')"
+uv run pytest -n auto                              # full suite (coverage gate: fail_under=60)
+uv run black --check neurosymbolic_system tests    # + isort, flake8, bandit — see CLAUDE.md
+uv run teken cli doctor . --strict                 # the agent-first rubric gate
+/version-bump patch|minor|major                    # version-check CI blocks merge without it
+markdownlint-cli2 "**/*.md" "#node_modules" "#.local" "#.claude/skills" "#.teken"
 ```
 
-Revisit each line as the corresponding stack element actually lands.
 A `pr lint --extra=tests,version,markdown` ask is filed upstream
 ([devex#41](https://github.com/agentculture/devex/issues/41)).
+
+### Extraction PRs are two-repo changes
+
+Porting a module out of `reachy-mini-cli` lands in two repos: the seam
+here first, then the consumer swap that deletes the donor's copy. Say
+so in **both** PR bodies, and file the sibling-repo issue with the
+`communicate` skill before the second one goes up. If the PR touches
+the tick contract (channels, arbitration classes, the `tick_seam`
+signature, the `Sense` shape), name every consumer it obliges to change
+— today `reachy-mini-cli` and `microduck-cli`.
 
 ## Reply etiquette
 
@@ -203,6 +220,6 @@ in the fix-up commit message.
 The `status` extension queries SonarCloud directly (it predates the
 upstream Sonar integration in `devex pr read`). Both surfaces are
 trustworthy — `devex pr read` for display in the briefing, `status` for
-the gate. Steward isn't yet a registered mesh agent, so the
-post-merge IRC ping that Culture's `pr-review` includes is still
-skipped — that returns when Steward joins the mesh.
+the gate. `neurosymbolic-system` isn't yet a registered mesh
+agent, so the post-merge IRC ping that Culture's `pr-review` includes
+is still skipped — that returns when this agent joins the mesh.

@@ -12,14 +12,18 @@ from neurosymbolic_system import __version__
 from neurosymbolic_system.cli._output import emit_result
 
 _TEXT = """\
-neurosymbolic-system — a clonable template for AgentCulture mesh agents.
+neurosymbolic-system — the runtime that lets agents control robots.
 
 Purpose
 -------
-Scaffold for a new Culture mesh agent: an agent-first CLI (cited from the teken
-`python-cli` reference), an identity (culture.yaml + CLAUDE.md), the canonical
-guildmaster skill kit under .claude/skills/, and a deploy/CI baseline. Clone it,
-rename the package, and edit culture.yaml to mint a new agent.
+The library half of the Reachy Mini stack: senses, rules, arbitration and motion
+composed onto one 50 Hz tick, imported by robot CLIs such as reachy-mini-cli and
+microduck-cli rather than re-implemented in each. Extracted from reachy-mini-cli;
+the runtime modules have not landed yet, so today this CLI carries the agent
+baseline only — identity (culture.yaml + AGENTS.colleague.md), the agent-first
+verbs below (cited from the teken `python-cli` reference), the guildmaster skill
+kit under .claude/skills/, and a deploy/CI baseline. See CLAUDE.md for the
+architecture the extraction is cutting a seam around.
 
 Commands
 --------
