@@ -71,7 +71,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     parser = _CliArgumentParser(
         prog="neurosymbolic-system",
-        description="neurosymbolic-system — a clonable template for AgentCulture mesh agents.",
+        description="neurosymbolic-system — the runtime that lets agents control robots.",
     )
     parser.add_argument(
         "--version",

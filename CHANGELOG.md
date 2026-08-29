@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-08-29
+
+### Changed
+
+- **`CLAUDE.md` re-initialized from the seed placeholder into a real runtime prompt.** Documents the agent-first CLI that exists today, and — as an explicitly-marked design brief, not a description of this package — the donor architecture being extracted from `reachy-mini-cli`: one 50 Hz tick with one owner per channel, the four contention classes, the single `tick_seam` consumer contract, injected peek-callable senses, two-layer rules-as-data, drop-don't-block on the 20 ms budget, fail-closed validation, and the locator-vs-filter / unit-name porting lessons. Adds the hardware-ownership boundary (what stays in the consumer CLI), the no-third-party-runtime-dependency policy, and the cross-repo working rules for `reachy-mini-cli` / `microduck-cli` / `reachy_nova`.
+- **`README.md` rewritten for the domain** — states the day-zero status plainly, keeps the CLI/quickstart tables, and adds a one-page design summary plus the consumer table.
+- **`cicd` skill adapted for a live stack** — the greenfield no-op step list is replaced by this repo's real pre-PR commands (pytest, lint, rubric gate, version-bump, markdownlint), a new "Extraction PRs are two-repo changes" subsection covers the donor/consumer split, and the triage PUSHBACK rule now cites the tick invariants instead of the generic all-backends rule. Logged as a local divergence in `docs/skill-sources.md`.
+- **CLI self-description no longer claims to be a clonable template** — the parser description, the `learn` prompt and the `explain` root entry now state the robot-runtime domain and say plainly that the runtime modules have not landed yet.
+
 ## [0.7.0] - 2026-08-24
 
 ### Added
