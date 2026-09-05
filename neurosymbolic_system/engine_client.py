@@ -47,7 +47,7 @@ import subprocess  # nosec B404 - argv-list subprocess calls only, no shell
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from neurosymbolic_system.cli._errors import EXIT_ENV_ERROR, CliError
+from neurosymbolic_system.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, CliError
 
 #: Environment variable naming an explicit engine binary path (first in the
 #: resolution order — see :func:`find_engine`).
@@ -56,10 +56,10 @@ ENV_ENGINE_PATH = "NEUROSYMBOLIC_ENGINE"
 #: Fallback name looked up on PATH when the env var is unset or unusable.
 ENGINE_BINARY_NAME = "neurosymbolic-engine"
 
-#: Default subprocess timeout, seconds. Every verb here is a one-shot local
+#: Default subprocess timeout, in seconds. Every verb here is a one-shot local
 #: process (rule validation, a version print) — 30s is generous headroom, not
 #: a tuned budget.
-DEFAULT_TIMEOUT = 30.0
+DEFAULT_TIMEOUT_S = 30.0
 
 #: This client's expectation of the engine's wire protocol (spec h35). Bump
 #: this only in lockstep with a matching bump on the Go side.
@@ -127,10 +127,26 @@ def _error_from_json_stderr(exit_code: int, stderr: str) -> CliError:
     except json_module.JSONDecodeError:
         payload = None
     if isinstance(payload, dict) and "message" in payload:
+        raw_code = payload.get("code", exit_code)
+        # `bool` is an `int` subclass in Python, so exclude it explicitly —
+        # a `code: true` body should be treated as malformed, not as `1`.
+        code = raw_code if isinstance(raw_code, int) and not isinstance(raw_code, bool) else None
+        if code is not None and code in (EXIT_USER_ERROR, EXIT_ENV_ERROR):
+            return CliError(
+                code=code,
+                message=str(payload["message"]),
+                remediation=str(payload.get("remediation", "")),
+            )
+        # A non-integer or out-of-range `code` (not 1 or 2) is a malformed
+        # error body, not a value to relay — fall back to a client-authored
+        # environment error carrying the raw stderr, per the promise above.
         return CliError(
-            code=int(payload.get("code", exit_code)),
-            message=str(payload["message"]),
-            remediation=str(payload.get("remediation", "")),
+            code=EXIT_ENV_ERROR,
+            message=(
+                "neurosymbolic-engine returned a malformed error body "
+                f"(code={raw_code!r}): {stderr.strip()}"
+            ),
+            remediation="",
         )
     return CliError(
         code=exit_code,
@@ -156,16 +172,16 @@ def _error_from_text_stderr(exit_code: int, stderr: str) -> CliError:
 class EngineClient:
     """Thin subprocess client for one located ``neurosymbolic-engine`` binary."""
 
-    def __init__(self, path: str, *, timeout: float = DEFAULT_TIMEOUT) -> None:
+    def __init__(self, path: str, *, timeout_s: float = DEFAULT_TIMEOUT_S) -> None:
         self.path = path
-        self.timeout = timeout
+        self.timeout_s = timeout_s
 
     def run(
         self,
         verb: str,
         *args: str,
         json: bool = False,
-        timeout: float | None = None,
+        timeout_s: float | None = None,
     ) -> EngineResult:
         """Run ``<binary> <verb-tokens...> <args...> [--json]``.
 
@@ -174,13 +190,14 @@ class EngineClient:
         tokens before ``args``. Raises :class:`CliError` verbatim (relayed
         from the binary's own error body) on a non-zero exit, or a
         client-authored environment error when the binary cannot even be
-        started or exceeds ``timeout``.
+        started (including a non-executable file, a directory, or any other
+        launch-time ``OSError``) or exceeds ``timeout_s``.
         """
         argv = [self.path, *verb.split(), *args]
         if json:
             argv.append("--json")
 
-        effective_timeout = timeout if timeout is not None else self.timeout
+        effective_timeout = timeout_s if timeout_s is not None else self.timeout_s
         try:
             proc = subprocess.run(  # nosec B603 - argv list, shell=False, see module docstring
                 argv,
@@ -197,6 +214,17 @@ class EngineClient:
                 message=f"neurosymbolic-engine timed out after {effective_timeout}s "
                 f"running '{verb}'",
                 remediation="the engine process may be wedged; retry or investigate it directly",
+            ) from None
+        except OSError as err:
+            # Any other process-launch failure — a non-executable file, a
+            # directory, a bad executable format — is the same class of
+            # problem as a missing binary from the caller's point of view:
+            # the environment isn't set up to run the engine. Name the
+            # underlying error rather than letting a traceback leak.
+            raise CliError(
+                code=EXIT_ENV_ERROR,
+                message=f"neurosymbolic-engine failed to start ({self.path}): {err}",
+                remediation=_BUILD_REMEDIATION,
             ) from None
 
         result: Any = None
@@ -271,7 +299,7 @@ def check_protocol(
 __all__ = [
     "ENV_ENGINE_PATH",
     "ENGINE_BINARY_NAME",
-    "DEFAULT_TIMEOUT",
+    "DEFAULT_TIMEOUT_S",
     "EXPECTED_PROTOCOL",
     "find_engine",
     "missing_engine_error",
