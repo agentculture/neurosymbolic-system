@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-09-05T04:43:37Z",
-  "updated": "2026-09-05T05:28:13Z",
+  "updated": "2026-09-05T05:35:09Z",
   "claims": [
     {
       "id": "c1",
@@ -398,21 +398,33 @@
     {
       "id": "c20",
       "kind": "boundary",
-      "text": "Motion rendering and the behavior library stay in the consumer (reachy's 39 LIBRARY entries with Param domains, microduck's skills); the core arbitrates named actions it does not know how to render.",
+      "text": "The engine ships no motion primitives of its own: every action is adaptor-declared DATA \u2014 per claimed channel, a trajectory (keyframes or easing curve over behavior-local time t_local, with Param domains) that the engine samples into numeric channel values each tick. The donor's 39 LIBRARY entries and microduck's skills become such declarations on the consumer side, and the core renders nothing it was not handed as data.",
       "origin": "llm",
-      "status": "confirmed",
+      "status": "proposed",
       "honesty_conditions": [
         {
           "id": "h22",
           "text": "The engine ships no motion primitive: an action is an opaque name plus params validated against the adaptor's declared domain, and the fixture sink receives the name and params unchanged.",
           "status": "confirmed",
           "instruction": ""
+        },
+        {
+          "id": "h36",
+          "text": "The toy-robot adaptor declares an action as a keyframe trajectory on two channels; the engine's pose frames over its duration match the trajectory sampled at the tick period to within float tolerance, and an action declared without a trajectory for a channel it claims is refused at load.",
+          "status": "proposed",
+          "instruction": ""
         }
       ],
       "hard_questions": [],
       "links": [],
       "instruction": "",
-      "revisions": []
+      "revisions": [
+        {
+          "text": "Motion rendering and the behavior library stay in the consumer (reachy's 39 LIBRARY entries with Param domains, microduck's skills); the core arbitrates named actions it does not know how to render.",
+          "kind": "boundary",
+          "reason": "q6 resolved: sampleable trajectories reconcile c20 with c30's numeric pose stream"
+        }
+      ]
     },
     {
       "id": "c21",
@@ -604,9 +616,9 @@
         {
           "id": "q6",
           "text": "c20 says the engine renders no motion and actions are opaque names; c30 says the engine composes a complete numeric pose every tick. Both cannot hold unless the adaptor declares each action as DATA the engine can sample \u2014 keyframes or easing curves per channel over t_local (the donor's 'behaviors are pure functions of behavior-local time', library.py) \u2014 OR the 'pose frame' is per-channel owner + action + t_local for the consumer to render. Which? It decides t4, t8 and t13. [challenge / unstated-assumptions lens: library.py LibraryEntry contributions vs c20/c30]",
-          "resolved": false,
+          "resolved": true,
           "blocking": true,
-          "resolution": ""
+          "resolution": "Actions are adaptor-declared sampleable data: each action names, per channel it claims, a trajectory (keyframes or easing curve over behavior-local time t_local, with Param domains) that the engine samples into numeric channel values each tick; the pose frame is numbers, and the engine ships no motion primitives of its own. c20 amended to match."
         }
       ],
       "links": [],
