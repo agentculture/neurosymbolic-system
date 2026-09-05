@@ -21,6 +21,8 @@ ignores:
   - ".teken/**"
   # Vendored skills are cited verbatim from guildmaster — do not reformat them.
   - ".claude/skills/**"
+  # Vendored Go modules (go mod vendor) are third-party, verbatim — never reformat.
+  - "vendor/**"
   # devague exports (think/spec-to-plan) render literal <placeholder> text in
   # prose, which markdownlint's MD033 (no inline HTML) misreads as HTML tags.
   - "docs/specs/**"
