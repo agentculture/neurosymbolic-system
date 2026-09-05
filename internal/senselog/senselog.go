@@ -73,6 +73,30 @@ func sanitize(value string) string {
 	return value
 }
 
+// sanitizeDetail replaces every control character in a detail with '_'.
+//
+// detail is the one field of the grammar this package does not control: it
+// carries error strings, peer-supplied names and rule ids from callers that
+// got them off a wire. A '\n' in there ends the record early and the bytes
+// after it become, to a consumer reading line by line, a SECOND record — one
+// a peer wrote. That is a forged log entry, so the newline is removed rather
+// than trusted. Spaces and ']' stay: the detail is the free-text tail, and
+// sanitize's stricter rule is only right for the three keyed fields.
+func sanitizeDetail(detail string) string {
+	if strings.IndexFunc(detail, isControl) < 0 {
+		return detail
+	}
+	return strings.Map(func(r rune) rune {
+		if isControl(r) {
+			return '_'
+		}
+		return r
+	}, detail)
+}
+
+// isControl reports whether r would break the one-record-per-line grammar.
+func isControl(r rune) bool { return r < 0x20 || r == 0x7f }
+
 // Stage emits one SENSE-grammar line for a pipeline stage that ran normally.
 func (l *Logger) Stage(stage, source, event, detail string) {
 	l.write(stage, source, event, detail)
@@ -92,5 +116,6 @@ func (l *Logger) Drop(stage, source, event, reason, detail string) {
 func (l *Logger) write(stage, source, event, detail string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	fmt.Fprintf(l.w, lineFormat, sanitize(stage), sanitize(source), sanitize(event), detail)
+	fmt.Fprintf(l.w, lineFormat,
+		sanitize(stage), sanitize(source), sanitize(event), sanitizeDetail(detail))
 }

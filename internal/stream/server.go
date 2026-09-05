@@ -59,9 +59,11 @@ type Stats struct {
 	FramesIn uint64
 	// FramesOut counts frames actually written to a peer.
 	FramesOut uint64
-	// Drops counts outbound telemetry frames that were never written — a
-	// full queue, or a frame that would not encode. Every one of them is also
-	// a named senselog line, so a grep of the log and a read of the counters
+	// Drops counts work this endpoint refused rather than performed: an
+	// outbound telemetry frame never written (a full queue, or a frame that
+	// would not encode) and a management frame turned away because the session
+	// already had its bound of verbs in flight. Every one of them is also a
+	// named senselog line, so a grep of the log and a read of the counters
 	// agree.
 	Drops uint64
 	// Refused counts connections turned away because the socket already had

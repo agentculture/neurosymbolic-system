@@ -25,7 +25,7 @@ type session struct {
 	w      io.Writer
 	closer io.Closer
 
-	out  chan []byte
+	out  chan outFrame
 	quit chan struct{}
 
 	wmu        sync.Mutex
@@ -41,11 +41,24 @@ type session struct {
 	// then locks wmu, so a flush that stopped at an empty channel could let the
 	// end frame win that lock and overtake the very pose it was waiting for.
 	// A counter the writer bumps AFTER its Write has no such window.
+	//
+	// queued is bumped BEFORE the frame reaches the channel, and rolled back if
+	// the queue is full, for the mirror-image reason: a frame visible to the
+	// writer but not yet counted is one the flush does not know to wait for.
+	// Only the tick goroutine writes these two increments, so the rollback is
+	// never contended.
 	queued  atomic.Uint64
 	written atomic.Uint64
 
 	// greeted is touched only by the reader goroutine.
 	greeted bool
+
+	// mgmtInflight counts the management verbs running on their own
+	// goroutines. It is bumped by the reader goroutine before the goroutine
+	// starts and dropped by that goroutine when it retires, so the reader's
+	// decision to refuse is made against a count that already includes the
+	// frame in hand.
+	mgmtInflight atomic.Int64
 
 	// subscribed flips to true only after the hello REPLY has been written.
 	// Telemetry (pose, event, heartbeat) is enqueued from the tick goroutine
@@ -61,7 +74,7 @@ type session struct {
 func newSession(srv *Server, r io.Reader, w io.Writer, closer io.Closer) *session {
 	return &session{
 		srv: srv, r: r, w: w, closer: closer,
-		out:        make(chan []byte, srv.cfg.OutboundQueue),
+		out:        make(chan outFrame, srv.cfg.OutboundQueue),
 		quit:       make(chan struct{}),
 		writerDone: make(chan struct{}),
 	}
@@ -198,9 +211,26 @@ func (s *session) send(payload any) error {
 	return nil
 }
 
+// outFrame is one queued telemetry frame, UNENCODED.
+//
+// The queue carries the payload value rather than its bytes because everything
+// that enqueues runs on the tick goroutine, and json.Marshal over a pose both
+// allocates and costs time proportional to the channel count. An export leg on
+// the tick thread is a timestamp and a bounded append, nothing more; the
+// encode belongs to the writer goroutine, which is allowed to be slow. kind
+// rides along so a failure in the writer can still name what it dropped.
+//
+// Payloads are safe to encode later because every producer hands over a value
+// it does not keep: the engine composes a fresh pose map per tick, and the
+// heartbeat and event bodies are built at the call site.
+type outFrame struct {
+	kind    string
+	payload any
+}
+
 // enqueue puts one telemetry frame on the bounded queue, or DROPS it with a
-// named line. It never blocks: pose, event and heartbeat frames are emitted
-// from the tick goroutine, and at 50 Hz the budget is 20 ms.
+// named line. It never blocks and never encodes: pose, event and heartbeat
+// frames are emitted from the tick goroutine, and at 50 Hz the budget is 20 ms.
 //
 // The drop is newest-first — the frame in hand is the one discarded — so a
 // consumer that catches up receives a contiguous older window rather than a
@@ -214,15 +244,22 @@ func (s *session) enqueue(kind string, payload any) {
 		return
 	default:
 	}
-	body, err := encodeFrame(payload)
-	if err != nil {
-		s.srv.drop(kind, "frame-too-large", err.Error())
-		return
-	}
+	// Count the frame BEFORE it becomes visible to the writer, and undo the
+	// count if the queue turns it away.
+	//
+	// The other order leaves a window — a few instructions wide, but reached
+	// from the tick goroutine fifty times a second — in which a frame is on the
+	// queue and uncounted. A Close landing in it reads written >= queued, skips
+	// the drain flushWithin exists to perform, and writes the end frame straight
+	// past a pose the writer still holds: the consumer's last word from the
+	// robot then arrives after the stream has been declared over. Counting
+	// first makes queued an over-estimate at worst, which costs a shutdown one
+	// extra poll and nothing else.
+	s.queued.Add(1)
 	select {
-	case s.out <- body:
-		s.queued.Add(1)
+	case s.out <- outFrame{kind: kind, payload: payload}:
 	default:
+		s.queued.Add(^uint64(0)) // roll back: nothing was accepted
 		s.srv.drop(kind, "backpressure", fmt.Sprintf(
 			"the consumer is not reading; the outbound queue is full at %d frames",
 			cap(s.out)))
@@ -233,22 +270,43 @@ func (s *session) writeLoop() {
 	defer close(s.writerDone)
 	for {
 		select {
-		case body := <-s.out:
-			s.wmu.Lock()
-			_, err := s.w.Write(body)
-			s.wmu.Unlock()
-			if err != nil {
-				s.srv.note("writer", "outbound", "the peer's connection failed: "+
-					firstLine(err.Error()))
-				s.srv.detach(s)
+		case frame := <-s.out:
+			if !s.writeFrame(frame) {
 				return
 			}
-			s.written.Add(1)
-			s.srv.framesOut.Add(1)
 		case <-s.quit:
 			return
 		}
 	}
+}
+
+// writeFrame encodes and writes one dequeued telemetry frame, and reports
+// whether the writer goroutine survives it.
+//
+// A payload that will not encode is a NAMED DROP here rather than a refusal on
+// the tick goroutine — that is the cost of deferring the encode, and it is
+// paid by naming the drop where it happens. It still counts as written: the
+// frame has left the queue and can never be written, so a shutdown flush
+// waiting on the counters must not sit out its whole grace for it.
+func (s *session) writeFrame(frame outFrame) bool {
+	body, err := encodeFrame(frame.payload)
+	if err != nil {
+		s.srv.drop(frame.kind, "frame-too-large", err.Error())
+		s.written.Add(1)
+		return true
+	}
+	s.wmu.Lock()
+	_, err = s.w.Write(body)
+	s.wmu.Unlock()
+	if err != nil {
+		s.srv.note("writer", "outbound", "the peer's connection failed: "+
+			firstLine(err.Error()))
+		s.srv.detach(s)
+		return false
+	}
+	s.written.Add(1)
+	s.srv.framesOut.Add(1)
+	return true
 }
 
 func (s *session) readLoop() {
@@ -335,9 +393,26 @@ func (s *session) dispatch(body []byte) bool {
 
 func (s *session) handleHello(body []byte) bool {
 	var in helloIn
-	_ = json.Unmarshal(body, &in) // the client name is informational
+	if err := decodeStrict(body, &in); err != nil {
+		// A handshake the engine did not fully understand is not a handshake:
+		// the client believes it said something this engine never read.
+		_ = s.send(newError(CodeUser,
+			"a hello frame could not be decoded: "+firstLine(err.Error()),
+			fmt.Sprintf("send {\"v\": %d, \"kind\": %q, \"client\": \"...\"} and nothing "+
+				"else; a field this engine does not understand is refused, never ignored",
+				Version, KindHello), ""))
+		return false
+	}
+	if len(in.Client) > maxClientNameBytes {
+		_ = s.send(newError(CodeUser, fmt.Sprintf(
+			"a hello frame declares a %d-byte client name", len(in.Client)),
+			fmt.Sprintf("send a client name of at most %d bytes; an over-long name is "+
+				"refused rather than shortened, because a name this endpoint cut down is "+
+				"a name the client never sent", maxClientNameBytes), ""))
+		return false
+	}
 	s.greeted = true
-	s.srv.note("hello", KindHello, "a client attached: "+sanitizeClient(in.Client))
+	s.srv.note("hello", KindHello, "a client attached: "+clientLabel(in.Client))
 	body, err := encodeFrame(helloOut{
 		V: Version, Kind: KindHello, EngineVersion: s.srv.cfg.EngineVersion,
 	})
@@ -364,12 +439,22 @@ func (s *session) handleHello(body []byte) bool {
 	return true
 }
 
-func sanitizeClient(name string) string {
+// maxClientNameBytes bounds the hello frame's client name.
+//
+// It is a REFUSAL boundary, not a truncation point. The name's only job is to
+// tell an operator WHICH client attached, and a name the endpoint shortened is
+// a name the client never sent: two clients sharing a 64-byte prefix collapse
+// into one entry in the log, which is worse than no name at all. Refusing keeps
+// the rule this runtime applies to an out-of-range axis, an over-long say and
+// an unknown field — refused, never reinterpreted — and a peer told its name is
+// too long can send a shorter one.
+const maxClientNameBytes = 64
+
+// clientLabel is the log label for an ACCEPTED client name. It never alters the
+// supplied value; an over-long one is refused in handleHello, before this.
+func clientLabel(name string) string {
 	if name == "" {
 		return "(unnamed)"
-	}
-	if len(name) > 64 {
-		return name[:64]
 	}
 	return name
 }
@@ -382,10 +467,11 @@ func (s *session) handleSense(body []byte) bool {
 		return true
 	}
 	var in senseIn
-	if err := json.Unmarshal(body, &in); err != nil {
+	if err := decodeStrict(body, &in); err != nil {
 		_ = s.send(newError(CodeUser,
 			"a sense frame could not be decoded: "+firstLine(err.Error()),
-			"send \"fields\" as an object of name to value (or null)", ""))
+			"send \"fields\" as an object of name to value (or null), and nothing this "+
+				"engine does not declare; an unknown field is refused, never ignored", ""))
 		return true
 	}
 	// Values are passed through exactly as decoded. A transport that coerced
@@ -403,10 +489,11 @@ func (s *session) handleIntent(body []byte) bool {
 		return true
 	}
 	var in intentIn
-	if err := json.Unmarshal(body, &in); err != nil {
+	if err := decodeStrict(body, &in); err != nil {
 		_ = s.send(newError(CodeUser,
 			"an intent frame could not be decoded: "+firstLine(err.Error()),
-			fmt.Sprintf("send \"op\" as %q or %q", OpAdmit, OpEvict), ""))
+			fmt.Sprintf("send \"op\" as %q or %q, and no field this engine does not "+
+				"declare; an unknown field is refused, never ignored", OpAdmit, OpEvict), ""))
 		return true
 	}
 
@@ -486,10 +573,11 @@ func (s *session) sendCommand(cmd tick.Command, id string) {
 // operator's question. Neither is acceptable, so it runs on neither.
 func (s *session) handleMgmt(body []byte) bool {
 	var in mgmtIn
-	if err := json.Unmarshal(body, &in); err != nil {
+	if err := decodeStrict(body, &in); err != nil {
 		_ = s.send(newError(CodeUser,
 			"a management frame could not be decoded: "+firstLine(err.Error()),
-			"send \"id\" and \"verb\"", ""))
+			"send \"id\" and \"verb\", and no field this engine does not declare; an "+
+				"unknown field is refused, never ignored", ""))
 		return true
 	}
 	if s.srv.mgmt == nil {
@@ -499,9 +587,28 @@ func (s *session) handleMgmt(body []byte) bool {
 				"one-off exec path", in.ID))
 		return true
 	}
+	// One goroutine per frame is what makes a slow verb harmless; UNBOUNDED
+	// goroutines per frame is what makes a fast client dangerous, since each
+	// also holds a body copy of up to MaxFrameBytes. Refuse past the bound with
+	// a named reason rather than queueing: a queue only moves the same
+	// unboundedness somewhere else, and an operator waiting on an answer would
+	// rather be told the endpoint is busy.
+	limit := int64(s.srv.cfg.MaxInflightMgmt)
+	if s.mgmtInflight.Add(1) > limit {
+		s.mgmtInflight.Add(-1)
+		s.srv.drop(KindMgmt, "mgmt-busy", fmt.Sprintf(
+			"%d management verbs are already running on this session", limit))
+		_ = s.send(newError(CodeEnv, fmt.Sprintf(
+			"this session already has %d management verbs in flight, which is the limit",
+			limit),
+			"wait for a result and retry; management work is bounded so a burst of "+
+				"requests cannot cost the robot its memory or its scheduler", in.ID))
+		return true
+	}
 	raw := make(json.RawMessage, len(body))
 	copy(raw, body)
 	go func() {
+		defer s.mgmtInflight.Add(-1)
 		result := s.srv.mgmt.HandleJSON(raw)
 		if len(result) == 0 {
 			result = json.RawMessage("null")

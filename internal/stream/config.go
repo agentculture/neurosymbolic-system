@@ -24,6 +24,19 @@ const DefaultSocketName = "engine.sock"
 // blink rather than serving seconds-stale poses.
 const DefaultOutboundQueue = 8
 
+// DefaultMaxInflightMgmt bounds how many management verbs one session may have
+// running at once.
+//
+// A management verb answers on its own goroutine so a slow one (a rules
+// re-read, a doctor probe) cannot pause the reader or spend the robot's tick
+// budget. Unbounded, that is a lever: a client sending frames faster than the
+// handler retires them starts a goroutine and holds a body copy of up to
+// MaxFrameBytes for each, from one socket, after a handshake that costs
+// nothing. Four is a bound, not a queue — an operator does not ask a robot five
+// questions at once, and the fifth is refused with a named reason rather than
+// buffered, which is the same answer this package gives a full outbound queue.
+const DefaultMaxInflightMgmt = 4
+
 // DefaultHeartbeatEvery is the interval between heartbeat frames.
 //
 // The heartbeat exists so a consumer can tell "the engine is alive and idle"
@@ -85,6 +98,11 @@ type Config struct {
 	// DefaultOutboundQueue.
 	OutboundQueue int
 
+	// MaxInflightMgmt bounds the management verbs one session may have
+	// running at once. Zero or less means DefaultMaxInflightMgmt: there is no
+	// "unlimited" setting, because the unbounded case is the bug.
+	MaxInflightMgmt int
+
 	// EngineVersion is echoed in the hello reply so a client can refuse an
 	// engine it does not understand by name rather than by symptom.
 	EngineVersion string
@@ -115,6 +133,9 @@ func (c *Config) normalize(stdio bool) error {
 	}
 	if c.OutboundQueue <= 0 {
 		c.OutboundQueue = DefaultOutboundQueue
+	}
+	if c.MaxInflightMgmt <= 0 {
+		c.MaxInflightMgmt = DefaultMaxInflightMgmt
 	}
 	if c.HeartbeatEvery == 0 {
 		c.HeartbeatEvery = DefaultHeartbeatEvery
