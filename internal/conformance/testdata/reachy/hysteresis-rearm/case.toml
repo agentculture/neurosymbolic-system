@@ -1,0 +1,11 @@
+# reachy / hysteresis-rearm — a rule that fired must see its predicate read
+# false CONTINUOUSLY for `hysteresis` seconds before it may fire again.
+#
+# Donor test: tests/test_behavior_rule_engine.py
+#   `test_hysteresis_requires_continuous_false_before_refire` — the sequence
+#   T,T,T,F,F,F,F,F,T at dt = 0.25 with cooldown 0 and hysteresis 1.0 yields
+#   exactly 2 fires and 2 `reason=rearming` lines, and never a
+#   `reason=cooldown`.
+period_ms = 250
+ticks = 9
+base_action = "feel-alive"

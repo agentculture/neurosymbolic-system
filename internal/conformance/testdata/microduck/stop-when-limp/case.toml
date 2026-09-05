@@ -1,0 +1,15 @@
+# microduck / stop-when-limp — a duck that cannot hold itself up stops driving,
+# ONCE, and the cooldown keeps a flickering reading from resubmitting `stop`
+# every tick.
+#
+# Donor test: tests/test_rule_engine.py
+#   `test_a_cooldown_rule_fires_at_most_once_in_250_ticks_at_50hz`, mirrored
+#   here at the same cadence and the same tick count, over the SHIPPED
+#   `stop-when-limp` rule (whose `cooldown_s = 5.0` is the schema default).
+#   `test_the_first_firing_is_never_cooldown_gated` is the other half.
+#
+# Rules: the donor's shipped defaults, verbatim.
+period_ms = 20
+ticks = 250
+base_action = "idle"
+rule_layers = ["default_rules.toml"]

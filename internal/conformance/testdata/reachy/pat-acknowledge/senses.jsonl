@@ -1,0 +1,4 @@
+// A pat held from the first tick. A field a later line does not name is left
+// exactly as it was, so this one line means "pat is true for the whole run" —
+// the donor's `[Sense(pat_event=...)] * n` sequence.
+{"tick": 1, "fields": {"pat": true}}
