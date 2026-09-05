@@ -18,6 +18,8 @@ from __future__ import annotations
 import subprocess  # nosec B404 - argv-list git invocations only, no shell
 from pathlib import Path
 
+import pytest
+
 
 def _run_git(*args: str, cwd: Path) -> str:
     result = subprocess.run(  # nosec B603 - argv list, shell=False
@@ -59,9 +61,14 @@ def _base_ref(repo_root: Path) -> str:
         return "main"
     if _ref_exists("origin/main", cwd=repo_root):
         return "origin/main"
-    raise RuntimeError(
-        "neither 'main' nor 'origin/main' resolves in this checkout; "
-        "cannot compute the branch's diff against a base ref"
+    # A shallow CI clone (actions/checkout's default fetch-depth of 1) carries
+    # neither ref. Fetching inside a test is not acceptable, so the check is
+    # skipped with a named reason rather than failing on a harness limit; the
+    # full-history run (a developer checkout, or CI with fetch-depth: 0) is
+    # where the boundary is actually asserted.
+    pytest.skip(
+        "neither 'main' nor 'origin/main' resolves in this checkout (shallow clone); "
+        "the branch-diff boundary check needs a base ref"
     )
 
 
