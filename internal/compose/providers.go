@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -36,6 +37,14 @@ const providerStage = "provider"
 // runtime's convention is that a unit lives in the name — a cadence-dependent
 // tuning that lost its unit is a bug class of its own, and "timeout = 500"
 // would be ambiguous in exactly the way that convention exists to prevent.
+//
+// The three BOUNDS are pointers for one reason: an omitted knob and a knob
+// written as 0 are different requests, and only a pointer can tell them
+// apart. Omitted means "whatever provider.Config.validate decides"; written
+// means the operator chose it, and a chosen zero, negative or non-finite
+// bound is REFUSED (see checkBounds) rather than silently swapped for the
+// default. Silently defaulting produces the worst kind of config: a knob the
+// operator can see in their own file and cannot affect.
 type providerDoc struct {
 	Name         string   `toml:"name" json:"name"`
 	Kind         string   `toml:"kind" json:"kind"`
@@ -45,11 +54,42 @@ type providerDoc struct {
 	Inputs       []string `toml:"inputs" json:"inputs"`
 	Output       string   `toml:"output" json:"output"`
 	Labels       []string `toml:"labels" json:"labels"`
-	TimeoutS     float64  `toml:"timeout_s" json:"timeout_s"`
-	QueueDepth   int      `toml:"queue_depth" json:"queue_depth"`
-	Cadence      int      `toml:"cadence" json:"cadence"`
+	TimeoutS     *float64 `toml:"timeout_s" json:"timeout_s"`
+	QueueDepth   *int     `toml:"queue_depth" json:"queue_depth"`
+	Cadence      *int     `toml:"cadence" json:"cadence"`
 	SystemPrompt string   `toml:"system_prompt" json:"system_prompt"`
 	MaxTokens    int      `toml:"max_tokens" json:"max_tokens"`
+}
+
+// checkBounds refuses an explicitly written non-positive or non-finite bound,
+// naming the field and the file. An omitted bound (a nil pointer) is not
+// checked at all: it is not a value anybody wrote.
+//
+// It is FAIL-CLOSED for the same reason the rules loader refuses an
+// out-of-range param instead of clamping it: `timeout_s = 0` almost certainly
+// means "no timeout" to whoever typed it, and quietly reading it as "500 ms"
+// is the engine reinterpreting a command it was given.
+func (d providerDoc) checkBounds(path string) error {
+	// NaN fails every comparison, so !(v > 0) catches it as well as zero and
+	// negatives; an infinity passes that test and needs its own clause.
+	if t := d.TimeoutS; t != nil && (!(*t > 0) || math.IsInf(*t, 0)) {
+		return providerFileError(path,
+			fmt.Sprintf("timeout_s is %v, which is not a positive, finite number of seconds", *t),
+			"give timeout_s a value above 0, or omit it entirely to take the default")
+	}
+	if d.QueueDepth != nil && *d.QueueDepth < 1 {
+		return providerFileError(path,
+			fmt.Sprintf("queue_depth is %d, which is not a positive request-queue capacity",
+				*d.QueueDepth),
+			"give queue_depth a value of at least 1, or omit it entirely to take the default")
+	}
+	if d.Cadence != nil && *d.Cadence < 1 {
+		return providerFileError(path,
+			fmt.Sprintf("cadence is %d, which is not a positive number of ticks", *d.Cadence),
+			"give cadence a value of at least 1 (1 means every tick), or omit it "+
+				"entirely to take the default")
+	}
+	return nil
 }
 
 // toConfig is the mirror copied into the runtime struct. Zero values are left
@@ -65,13 +105,21 @@ func (d providerDoc) toConfig() provider.Config {
 		Inputs:       d.Inputs,
 		Output:       d.Output,
 		Labels:       d.Labels,
-		QueueDepth:   d.QueueDepth,
-		Cadence:      d.Cadence,
 		SystemPrompt: d.SystemPrompt,
 		MaxTokens:    d.MaxTokens,
 	}
-	if d.TimeoutS > 0 {
-		cfg.Timeout = time.Duration(d.TimeoutS * float64(time.Second))
+	// checkBounds has already refused any written value these could carry
+	// that validate would have had to correct, so a nil pointer here means
+	// exactly "omitted" and the zero it leaves is the "take the default"
+	// signal validate reads.
+	if d.TimeoutS != nil {
+		cfg.Timeout = time.Duration(*d.TimeoutS * float64(time.Second))
+	}
+	if d.QueueDepth != nil {
+		cfg.QueueDepth = *d.QueueDepth
+	}
+	if d.Cadence != nil {
+		cfg.Cadence = *d.Cadence
 	}
 	return cfg
 }
@@ -114,6 +162,18 @@ func loadProviderConfig(path string) (provider.Config, error) {
 				fmt.Sprintf("the config is not valid JSON (%v)", decodeErr),
 				"fix the document; unknown keys are refused as well as malformed syntax")
 		}
+		// A json.Decoder stops at the end of the first value, so a second
+		// document or trailing garbage would be silently ignored — a config
+		// an operator edited that has no effect and reports no error. See
+		// internal/adaptor's identical check.
+		if eofErr := decodedToEOF(dec); eofErr != nil {
+			return provider.Config{}, providerFileError(path,
+				fmt.Sprintf("the config has trailing content after the JSON document (%v)", eofErr),
+				"a provider config is exactly ONE JSON document; remove everything after it")
+		}
+	}
+	if err := doc.checkBounds(path); err != nil {
+		return provider.Config{}, err
 	}
 	return doc.toConfig(), nil
 }

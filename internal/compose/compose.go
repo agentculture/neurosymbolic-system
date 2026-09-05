@@ -90,7 +90,12 @@ const UsageText = `run [flags]
   --insecure-tcp <addr>  serve over TCP instead; see the flag's own refusal
   --period <duration>    tick period (default 20ms)
   --heartbeat <duration> heartbeat interval (default 1s; negative disables)
-  --base-action <name>   seed this action as the passive base layer`
+  --base-action <name>   seed this action as the passive base layer
+
+The first SIGINT or SIGTERM stops gracefully: the current tick finishes, one
+settling neutral pose is written, and the peer is sent an end-of-stream frame.
+The handler is released the moment that signal lands, so a SECOND SIGINT or
+SIGTERM terminates the process immediately even if the settle itself wedges.`
 
 // Options is one `run` invocation, already parsed and checked for internal
 // consistency but not yet resolved against the filesystem.

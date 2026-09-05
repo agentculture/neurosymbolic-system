@@ -35,9 +35,29 @@ import (
 // — everything else is validated exactly the same — which is what lets a rules
 // file be checked with no robot present.
 func Load(layers [][]string, vocab Vocabulary) (*Config, error) {
-	merged := &layerResult{modes: map[string]map[string]float64{}}
+	// Every file is PARSED first, across every layer, before any of them is
+	// name-checked. That order is what lets a rule predicate on an event a
+	// DIFFERENT layer declares (see eventFieldSet): the shipped layer names
+	// the event, a box-local overlay reacts to it, and neither half can be
+	// validated in isolation.
+	parsed := make([][]*file, 0, len(layers))
 	for _, paths := range layers {
-		layer, err := loadLayer(paths, vocab)
+		files := make([]*file, 0, len(paths))
+		for _, path := range paths {
+			f, err := parseFile(path)
+			if err != nil {
+				return nil, err
+			}
+			files = append(files, f)
+		}
+		parsed = append(parsed, files)
+	}
+
+	events := eventFieldSet(parsed)
+
+	merged := &layerResult{modes: map[string]map[string]float64{}}
+	for _, files := range parsed {
+		layer, err := buildLayer(files, vocab, events)
 		if err != nil {
 			return nil, err
 		}
@@ -47,6 +67,36 @@ func Load(layers [][]string, vocab Vocabulary) (*Config, error) {
 		merged = mergeLayers(merged, layer)
 	}
 	return merged.config(), nil
+}
+
+// eventFieldSet is every "<source>/<type>" identity DECLARED by an [[event]]
+// entry anywhere in the loaded config, live entries and tombstones alike.
+//
+// It exists because internal/events.Router publishes exactly these keys into
+// the tick's sense snapshot for one tick each — they are real predicate
+// fields that no robot's adaptor vocabulary declares (and should not: an
+// event is routing metadata, not a plant reading). Without this set, a rules
+// file loaded WITH a vocabulary could never carry a rule keyed on its own
+// events.
+//
+// A TOMBSTONED event still declares its identity: an overlay disabling an
+// event must not brick the rule keyed on it — that rule simply abstains
+// forever, exactly as it does before the event ever fires. Refusing it
+// instead would make `enabled = false` a two-line edit (the event and every
+// rule naming it), which is the fork a tombstone exists to avoid.
+func eventFieldSet(parsed [][]*file) map[string]bool {
+	fields := map[string]bool{}
+	for _, files := range parsed {
+		for _, f := range files {
+			for _, e := range f.events {
+				fields[e.ID()] = true
+			}
+			for _, id := range f.eventDisabled {
+				fields[id] = true
+			}
+		}
+	}
+	return fields
 }
 
 // LoadFile is Load over a single file in a single layer.
@@ -67,8 +117,11 @@ type layerResult struct {
 	eventDefault   *EventDefault
 }
 
-func loadLayer(paths []string, vocab Vocabulary) (*layerResult, error) {
-	if len(paths) == 0 {
+// buildLayer name-checks one layer's already-parsed files and folds them into
+// a single layerResult. events is the config-wide event-field set Load
+// collected; see eventFieldSet.
+func buildLayer(files []*file, vocab Vocabulary, events map[string]bool) (*layerResult, error) {
+	if len(files) == 0 {
 		return nil, nil
 	}
 	layer := &layerResult{
@@ -82,12 +135,9 @@ func loadLayer(paths []string, vocab Vocabulary) (*layerResult, error) {
 	origin := map[string]string{}
 	eventOrigin := map[string]string{}
 
-	for _, path := range paths {
-		f, err := parseFile(path)
-		if err != nil {
-			return nil, err
-		}
-		if err := applyVocabulary(f, vocab); err != nil {
+	for _, f := range files {
+		path := f.path
+		if err := applyVocabulary(f, vocab, events); err != nil {
 			return nil, err
 		}
 		for _, id := range append(ids(f.ordered), f.disabled...) {

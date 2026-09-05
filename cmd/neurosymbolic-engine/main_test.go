@@ -69,7 +69,10 @@ func TestRunVersionLdflagsOverride(t *testing.T) {
 	}
 }
 
-func TestRunNoArgsExitsOneWithUsageOnStderr(t *testing.T) {
+// No command is a REFUSAL, and every refusal this CLI makes is the same two
+// lines. It used to print the whole usage screen to stderr instead, which
+// neither the Python front nor an agent parsing stderr can read.
+func TestRunNoArgsEmitsTheTwoLineErrorContract(t *testing.T) {
 	var code int
 	stderr := capture(t, func(w *os.File) {
 		code = run(nil, os.Stdout, w)
@@ -78,8 +81,111 @@ func TestRunNoArgsExitsOneWithUsageOnStderr(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(stderr, "Usage:") {
-		t.Fatalf("stderr = %q, want it to contain %q", stderr, "Usage:")
+	lines := strings.Split(strings.TrimSuffix(stderr, "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("stderr = %q, want exactly two lines", stderr)
+	}
+	if lines[0] != "error: no command given" {
+		t.Errorf("first line = %q, want %q", lines[0], "error: no command given")
+	}
+	if !strings.HasPrefix(lines[1], "hint: ") {
+		t.Errorf("second line = %q, want a hint: line", lines[1])
+	}
+	for _, want := range []string{"help", "run", "rules check"} {
+		if !strings.Contains(lines[1], want) {
+			t.Errorf("hint = %q, want it to name %q", lines[1], want)
+		}
+	}
+	if strings.Contains(stderr, "Usage:") {
+		t.Error("stderr still carries the usage screen; that is what `help` is for")
+	}
+}
+
+func TestRunNoArgsJSON(t *testing.T) {
+	var code int
+	var stdout, stderr string
+	stdout = capture(t, func(w *os.File) {
+		stderr = capture(t, func(errW *os.File) {
+			code = run([]string{"--json"}, w, errW)
+		})
+	})
+
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
+	}
+	var decoded struct {
+		Code        int    `json:"code"`
+		Message     string `json:"message"`
+		Remediation string `json:"remediation"`
+	}
+	if err := json.Unmarshal([]byte(stderr), &decoded); err != nil {
+		t.Fatalf("stderr is not valid JSON: %v (%q)", err, stderr)
+	}
+	if decoded.Code != 1 || decoded.Message != "no command given" {
+		t.Fatalf("decoded = %+v", decoded)
+	}
+	if decoded.Remediation == "" {
+		t.Error("remediation is empty")
+	}
+}
+
+// Asking for help is a SUCCESS: the usage screen goes to stdout with exit 0,
+// which is the only way to see the command list without causing a failure.
+func TestRunHelpPrintsUsageOnStdout(t *testing.T) {
+	var code int
+	var stdout, stderr string
+	stdout = capture(t, func(w *os.File) {
+		stderr = capture(t, func(errW *os.File) {
+			code = run([]string{"help"}, w, errW)
+		})
+	})
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr = %q, want empty", stderr)
+	}
+	if !strings.Contains(stdout, "Usage:") {
+		t.Errorf("stdout = %q, want the usage screen", stdout)
+	}
+	for _, want := range []string{"run", "rules migrate", "help"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("usage does not list %q", want)
+		}
+	}
+}
+
+func TestRunHelpJSON(t *testing.T) {
+	var code int
+	stdout := capture(t, func(w *os.File) {
+		code = run([]string{"help", "--json"}, w, os.Stderr)
+	})
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	var decoded struct {
+		Usage    string   `json:"usage"`
+		Commands []string `json:"commands"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &decoded); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v (%q)", err, stdout)
+	}
+	if !strings.Contains(decoded.Usage, "Usage:") {
+		t.Errorf("usage = %q", decoded.Usage)
+	}
+	var sawRun bool
+	for _, name := range decoded.Commands {
+		if name == "run" {
+			sawRun = true
+		}
+	}
+	if !sawRun {
+		t.Errorf("commands = %v, want 'run' listed", decoded.Commands)
 	}
 }
 
@@ -128,7 +234,10 @@ func TestRunUnknownCommandJSON(t *testing.T) {
 	}
 }
 
-func TestRunRulesNoSubverbExitsOneWithUsage(t *testing.T) {
+// A noun group with no sub-verb is the other shape that used to print a usage
+// screen. Its hint lists only that group's sub-verbs — the whole verb list is
+// noise when the caller already picked a noun.
+func TestRunRulesNoSubverbEmitsTheTwoLineErrorContract(t *testing.T) {
 	var code int
 	stderr := capture(t, func(w *os.File) {
 		code = run([]string{"rules"}, os.Stdout, w)
@@ -136,8 +245,23 @@ func TestRunRulesNoSubverbExitsOneWithUsage(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(stderr, "Usage:") {
-		t.Fatalf("stderr = %q, want it to contain %q", stderr, "Usage:")
+	lines := strings.Split(strings.TrimSuffix(stderr, "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("stderr = %q, want exactly two lines", stderr)
+	}
+	if lines[0] != "error: no sub-command given for 'rules'" {
+		t.Errorf("first line = %q", lines[0])
+	}
+	if !strings.HasPrefix(lines[1], "hint: ") {
+		t.Errorf("second line = %q, want a hint: line", lines[1])
+	}
+	for _, want := range []string{"rules check", "rules list", "rules migrate", "rules reload"} {
+		if !strings.Contains(lines[1], want) {
+			t.Errorf("hint = %q, want it to name %q", lines[1], want)
+		}
+	}
+	if strings.Contains(lines[1], "version") {
+		t.Errorf("hint = %q, want only the 'rules' group's sub-verbs", lines[1])
 	}
 }
 

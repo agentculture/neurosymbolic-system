@@ -137,14 +137,20 @@ func validate(path string, data map[string]any) (*file, error) {
 // applyVocabulary re-checks a validated file's names against a robot's
 // vocabulary. It is a SEPARATE pass so a nil Vocabulary skips exactly the
 // name checks and nothing else.
-func applyVocabulary(f *file, vocab Vocabulary) error {
+//
+// events is the "<source>/<type>" set every [[event]] entry in the WHOLE
+// loaded config declares (see eventFieldSet). Those keys are predicate fields
+// internal/events.Router publishes per tick, so they are valid independent of
+// the robot's vocabulary — which never declares them, and should not: an
+// event is routing metadata, not a plant reading.
+func applyVocabulary(f *file, vocab Vocabulary, events map[string]bool) error {
 	if vocab == nil {
 		return nil
 	}
 	c := ctx{path: f.path}
 	for _, rule := range f.ordered {
 		rc := c.rule(rule.ID)
-		if err := checkPredicateNames(rc, rule.When, vocab); err != nil {
+		if err := checkPredicateNames(rc, rule.When, vocab, events); err != nil {
 			return err
 		}
 		if rule.Kind == KindReact {
@@ -191,22 +197,38 @@ func applyVocabulary(f *file, vocab Vocabulary) error {
 	return nil
 }
 
-func checkPredicateNames(c ctx, p Predicate, vocab Vocabulary) error {
+func checkPredicateNames(c ctx, p Predicate, vocab Vocabulary, events map[string]bool) error {
 	if !p.IsLeaf() {
 		for _, child := range append(append([]Predicate{}, p.All...), p.Any...) {
-			if err := checkPredicateNames(c, child, vocab); err != nil {
+			if err := checkPredicateNames(c, child, vocab, events); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
-	if !vocab.HasField(p.Field) {
-		return c.errf(
-			"use a sense field this robot's vocabulary declares",
-			"when.field '%s' is unknown", p.Field,
-		)
+	if vocab.HasField(p.Field) {
+		return nil
 	}
-	return nil
+	if events[p.Field] {
+		// An event field is BOOLEAN by construction: the router publishes it
+		// as true for exactly one tick, and it is absent otherwise. An
+		// ordered or equality comparison over it is a rule that can never
+		// mean what its author thought, so it is refused rather than left to
+		// silently never fire.
+		if !eventFieldOps[p.Op] {
+			return c.errf(
+				"an event field is present-for-one-tick or absent; use "+sortedKeys(eventFieldOps),
+				"when.field '%s' is an [[event]] entry, which op '%s' cannot test",
+				p.Field, p.Op,
+			)
+		}
+		return nil
+	}
+	return c.errf(
+		"use a sense field this robot's vocabulary declares, or an [[event]] "+
+			"entry's 'source/type' declared by one of the loaded rules files",
+		"when.field '%s' is unknown", p.Field,
+	)
 }
 
 func validateSchemaVersion(c ctx, data map[string]any) (int, error) {
