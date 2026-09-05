@@ -42,6 +42,7 @@ type Runtime struct {
 	Engine     *tick.Engine
 	Server     *stream.Server
 	Handler    *mgmt.Handler
+	Providers  []namedProvider
 
 	status *statusRider
 	log    *senselog.Logger
@@ -79,7 +80,14 @@ func New(opts Options, build Build, stdin io.Reader, stdout, stderr io.Writer) (
 		return nil, err
 	}
 
-	status := &statusRider{}
+	// The snapshot is BOTH a provider's sink and its view: a provider's answer
+	// is an ordinary sense field, written back where every other reading lives.
+	providers, err := buildProviders(opts.ProviderPaths, voc, snapshot, log)
+	if err != nil {
+		return nil, err
+	}
+
+	status := &statusRider{providers: providers}
 	handler := &mgmt.Handler{
 		Version:  build.Version,
 		Revision: build.Revision,
@@ -117,22 +125,34 @@ func New(opts Options, build Build, stdin io.Reader, stdout, stderr io.Writer) (
 		Log:        log,
 	}, srv)
 	if err != nil {
+		closeProviders(providers)
 		return nil, clifmt.NewUserError(err.Error(),
 			"name an action the adaptor config declares, or drop --"+flagBaseAction)
 	}
 	srv.Attach(engine)
 	status.bind(engine, srv, lane)
 
-	// The ONE seam, fanned out with each rider isolated from the others. Rules
-	// run first (they admit and evict), the status rider records what that
-	// tick resolved to, and the stream's heartbeat rides last so a beat means
-	// "this tick completed".
-	seam := ruleeval.NewBus(log).
+	// The ONE seam, fanned out with each rider isolated from the others.
+	//
+	// Order: providers first, then rules, then the status rider, and the
+	// stream's heartbeat last. Providers lead because they are sense
+	// PRODUCERS — a request enqueued this tick is then built from the same
+	// view the rules go on to evaluate, so one tick is one coherent reading.
+	// (It changes nothing about when an answer arrives: a provider's worker
+	// writes back from its own goroutine, so the rule keyed on its output
+	// necessarily fires on a LATER tick.) The heartbeat rides last so a beat
+	// means "this tick completed", not "this tick started".
+	bus := ruleeval.NewBus(log)
+	for _, p := range providers {
+		bus.Add(providerRider(p), p.Provider.Driver())
+	}
+	seam := bus.
 		Add(ruleeval.StageRule, lane.Tick).
 		Add("status", status.Tick).
 		Add(stream.KindHeartbeat, srv.Seam).
 		Compose()
 	if !engine.Send(tick.SetSeamCmd{Seam: seam}) {
+		closeProviders(providers)
 		return nil, clifmt.NewEnvError(
 			"the engine refused the tick seam before the first tick",
 			"this is a bug in the composition root, not a mistake in the config")
@@ -140,10 +160,24 @@ func New(opts Options, build Build, stdin io.Reader, stdout, stderr io.Writer) (
 
 	return &Runtime{
 		Vocabulary: voc, Snapshot: snapshot, Registry: registry, Rules: lane,
-		Engine: engine, Server: srv, Handler: handler, status: status, log: log,
-		period: opts.Period,
+		Engine: engine, Server: srv, Handler: handler, Providers: providers,
+		status: status, log: log, period: opts.Period,
 	}, nil
 }
+
+// providerRider is the name a provider's panic drop is filed under on the bus.
+// It carries the provider's own name so a grep of the log finds the offender
+// rather than "driver-2".
+func providerRider(p namedProvider) string { return providerStage + ":" + p.Name }
+
+// Close releases everything the runtime holds that outlives a Run: today, one
+// worker goroutine and one HTTP client per provider.
+//
+// It is separate from Run because a caller may build a Runtime and never run it
+// (a test, a dry-run check), and a provider's worker would leak either way. It
+// is idempotent in the only sense that matters here — call it once, from the
+// same place that built the runtime.
+func (r *Runtime) Close() { closeProviders(r.Providers) }
 
 // Run listens, serves and drives the loop until ctx is done.
 //
@@ -168,9 +202,9 @@ func (r *Runtime) Run(ctx context.Context) error {
 	go r.Server.Serve(serveCtx)
 
 	r.log.Stage(stage, Verb, "started", fmt.Sprintf(
-		"period=%v channels=%d actions=%d rule_layers=%d addr=%s",
+		"period=%v channels=%d actions=%d rule_layers=%d providers=%d addr=%s",
 		r.period, len(r.Vocabulary.Channels()), len(r.Vocabulary.Actions()),
-		r.Rules.Layers(), r.Server.Addr()))
+		r.Rules.Layers(), len(r.Providers), r.Server.Addr()))
 
 	err := r.Server.RunWith(ctx, r.Engine.Run)
 	stats := r.Engine.Stats()

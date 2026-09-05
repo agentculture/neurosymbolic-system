@@ -36,6 +36,9 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer, build Build)
 	if err != nil {
 		return renderError(err, stderr)
 	}
+	// Whatever outlives a Run — a provider's worker goroutine and its HTTP
+	// client — is released here, on every exit path including a refused run.
+	defer runtime.Close()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

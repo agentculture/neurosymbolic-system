@@ -62,6 +62,17 @@
   name = "tag_age_s"
   type = "float"
 
+# A DECISION PROVIDER's output field (see `neurosymbolic-engine run
+# --provider`). A provider writes its answer back into the perception snapshot
+# as an ordinary sense, so a rule keys on it exactly like a reading off a
+# sensor — the rules layer never learns a model was involved. Declaring it here
+# is what makes that legal: an output the adaptor config does not declare is a
+# field no rule is allowed to name, so the provider would run and nothing would
+# ever react to it. Configuration, not code, which is the whole point.
+[[senses]]
+  name = "mood"
+  type = "string"
+
 # --- actions ----------------------------------------------------------------
 
 # hum — the base layer: LOOPING, claims only the beacon, and is admitted

@@ -83,6 +83,8 @@ const UsageText = `run [flags]
   --adaptor <path>       the robot's adaptor config (.json or .toml); required
   --rules <path>         a rules file; repeatable, each occurrence is ONE layer
                          and a later layer overrides an earlier one per rule id
+  --provider <path>      a decision-provider config (.toml or .json);
+                         repeatable, one provider per occurrence
   --socket-dir <dir>     serve on <dir>/` + stream.DefaultSocketName + ` (0600)
   --stdio                serve the same protocol over stdin/stdout instead
   --insecure-tcp <addr>  serve over TCP instead; see the flag's own refusal
@@ -104,6 +106,13 @@ type Options struct {
 	// upgrade AND newly shipped rules reach a deployed box.
 	RuleLayers []string
 
+	// ProviderPaths are the decision-provider configs, one provider per
+	// occurrence. A provider writes its answer back into the perception
+	// snapshot as an ordinary sense field, so a rule predicates on it exactly
+	// like any other reading and neither the rules layer nor the engine ever
+	// learns a provider exists.
+	ProviderPaths []string
+
 	// SocketDir, Stdio and TCPAddr are the three transports, exactly one of
 	// which must be chosen.
 	SocketDir string
@@ -119,21 +128,27 @@ type Options struct {
 	BaseAction string
 }
 
-// rulesFlag collects a repeatable --rules into one layer per occurrence.
-type rulesFlag struct{ paths *[]string }
-
-func (r rulesFlag) String() string {
-	if r.paths == nil {
-		return ""
-	}
-	return strings.Join(*r.paths, ",")
+// pathListFlag collects a repeatable path flag in the order it was given.
+// Order is load-bearing for --rules (each occurrence is one layer, and a later
+// layer overrides an earlier one), so a flag that quietly reordered would
+// change what a rules stack means.
+type pathListFlag struct {
+	name  string
+	paths *[]string
 }
 
-func (r rulesFlag) Set(value string) error {
-	if value == "" {
-		return fmt.Errorf("--%s was given an empty path", flagRules)
+func (f pathListFlag) String() string {
+	if f.paths == nil {
+		return ""
 	}
-	*r.paths = append(*r.paths, value)
+	return strings.Join(*f.paths, ",")
+}
+
+func (f pathListFlag) Set(value string) error {
+	if value == "" {
+		return fmt.Errorf("--%s was given an empty path", f.name)
+	}
+	*f.paths = append(*f.paths, value)
 	return nil
 }
 
@@ -141,6 +156,7 @@ func (r rulesFlag) Set(value string) error {
 const (
 	flagAdaptor     = "adaptor"
 	flagRules       = "rules"
+	flagProvider    = "provider"
 	flagSocketDir   = "socket-dir"
 	flagStdio       = "stdio"
 	flagInsecureTCP = "insecure-tcp"
@@ -160,7 +176,8 @@ func ParseArgs(args []string) (Options, error) {
 	fs.SetOutput(io.Discard)
 
 	fs.StringVar(&opts.AdaptorPath, flagAdaptor, "", "")
-	fs.Var(rulesFlag{paths: &opts.RuleLayers}, flagRules, "")
+	fs.Var(pathListFlag{name: flagRules, paths: &opts.RuleLayers}, flagRules, "")
+	fs.Var(pathListFlag{name: flagProvider, paths: &opts.ProviderPaths}, flagProvider, "")
 	fs.StringVar(&opts.SocketDir, flagSocketDir, "", "")
 	fs.BoolVar(&opts.Stdio, flagStdio, false, "")
 	fs.StringVar(&opts.TCPAddr, flagInsecureTCP, "", "")
@@ -256,10 +273,14 @@ func (o Options) layers() [][]string {
 	return out
 }
 
-// adaptorExtensions maps a config's extension to whether it is TOML. The two
-// front ends share every validation rule; only the decoder differs.
+// extOf is filepath.Ext, named here so the two extension switches in this
+// package read the same way.
+func extOf(path string) string { return filepath.Ext(path) }
+
+// isTOMLConfig maps an adaptor config's extension to whether it is TOML. The
+// two front ends share every validation rule; only the decoder differs.
 func isTOMLConfig(path string) (bool, error) {
-	switch strings.ToLower(filepath.Ext(path)) {
+	switch strings.ToLower(extOf(path)) {
 	case ".json":
 		return false, nil
 	case ".toml":
