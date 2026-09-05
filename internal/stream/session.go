@@ -386,7 +386,16 @@ func (s *session) dispatch(body []byte) bool {
 
 func (s *session) handleHello(body []byte) bool {
 	var in helloIn
-	_ = json.Unmarshal(body, &in) // the client name is informational
+	if err := decodeStrict(body, &in); err != nil {
+		// A handshake the engine did not fully understand is not a handshake:
+		// the client believes it said something this engine never read.
+		_ = s.send(newError(CodeUser,
+			"a hello frame could not be decoded: "+firstLine(err.Error()),
+			fmt.Sprintf("send {\"v\": %d, \"kind\": %q, \"client\": \"...\"} and nothing "+
+				"else; a field this engine does not understand is refused, never ignored",
+				Version, KindHello), ""))
+		return false
+	}
 	s.greeted = true
 	s.srv.note("hello", KindHello, "a client attached: "+sanitizeClient(in.Client))
 	body, err := encodeFrame(helloOut{
@@ -433,10 +442,11 @@ func (s *session) handleSense(body []byte) bool {
 		return true
 	}
 	var in senseIn
-	if err := json.Unmarshal(body, &in); err != nil {
+	if err := decodeStrict(body, &in); err != nil {
 		_ = s.send(newError(CodeUser,
 			"a sense frame could not be decoded: "+firstLine(err.Error()),
-			"send \"fields\" as an object of name to value (or null)", ""))
+			"send \"fields\" as an object of name to value (or null), and nothing this "+
+				"engine does not declare; an unknown field is refused, never ignored", ""))
 		return true
 	}
 	// Values are passed through exactly as decoded. A transport that coerced
@@ -454,10 +464,11 @@ func (s *session) handleIntent(body []byte) bool {
 		return true
 	}
 	var in intentIn
-	if err := json.Unmarshal(body, &in); err != nil {
+	if err := decodeStrict(body, &in); err != nil {
 		_ = s.send(newError(CodeUser,
 			"an intent frame could not be decoded: "+firstLine(err.Error()),
-			fmt.Sprintf("send \"op\" as %q or %q", OpAdmit, OpEvict), ""))
+			fmt.Sprintf("send \"op\" as %q or %q, and no field this engine does not "+
+				"declare; an unknown field is refused, never ignored", OpAdmit, OpEvict), ""))
 		return true
 	}
 
@@ -537,10 +548,11 @@ func (s *session) sendCommand(cmd tick.Command, id string) {
 // operator's question. Neither is acceptable, so it runs on neither.
 func (s *session) handleMgmt(body []byte) bool {
 	var in mgmtIn
-	if err := json.Unmarshal(body, &in); err != nil {
+	if err := decodeStrict(body, &in); err != nil {
 		_ = s.send(newError(CodeUser,
 			"a management frame could not be decoded: "+firstLine(err.Error()),
-			"send \"id\" and \"verb\"", ""))
+			"send \"id\" and \"verb\", and no field this engine does not declare; an "+
+				"unknown field is refused, never ignored", ""))
 		return true
 	}
 	if s.srv.mgmt == nil {

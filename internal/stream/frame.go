@@ -29,9 +29,16 @@
 // returns an error, because a slow consumer must cost the robot nothing. The
 // queue carries UNENCODED payloads for the same reason: json.Marshal over a
 // pose allocates and scales with the channel count, so the writer goroutine
-// encodes, and the tick goroutine only appends. A
-// layer whose drops are invisible is indistinguishable from one that silently
-// no-ops, so every drop names its reason.
+// encodes, and the tick goroutine only appends. A layer whose drops are
+// invisible is indistinguishable from one that silently no-ops, so every drop
+// names its reason.
+//
+// # Inbound frames are decoded strictly
+//
+// Every inbound body is decoded with DisallowUnknownFields: a field this engine
+// does not declare is refused, naming it, rather than ignored. An ignored field
+// is a client's typo or a newer client's intent silently replaced by a default,
+// which is the same failure as clamping an out-of-range param.
 //
 // Control frames — the hello reply, refusals, management results and the
 // end-of-stream frame — take a DIRECT, blocking write instead. None of them is
@@ -48,6 +55,7 @@
 package stream
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -128,11 +136,15 @@ type header struct {
 
 // --- inbound bodies ---------------------------------------------------------
 
+// Every inbound body embeds header, because decoding is STRICT: a field the
+// struct does not declare is a refusal, and "v" and "kind" are on every frame.
 type helloIn struct {
+	header
 	Client string `json:"client"`
 }
 
 type senseIn struct {
+	header
 	Fields map[string]any `json:"fields"`
 }
 
@@ -141,6 +153,7 @@ type senseIn struct {
 // runtime's unit-in-the-name convention: a cadence-dependent tuning that lost
 // its unit is a bug class of its own.
 type intentIn struct {
+	header
 	Op        string             `json:"op"`
 	Name      string             `json:"name,omitempty"`
 	Action    string             `json:"action,omitempty"`
@@ -156,6 +169,7 @@ type intentIn struct {
 // the reply — because management verbs belong to the MgmtHandler, not to the
 // transport. The handler receives the frame's bytes verbatim.
 type mgmtIn struct {
+	header
 	ID   string   `json:"id"`
 	Verb string   `json:"verb"`
 	Args []string `json:"args,omitempty"`
@@ -242,6 +256,21 @@ func encodeFrame(payload any) ([]byte, error) {
 	binary.BigEndian.PutUint32(out[:lengthPrefixBytes], uint32(len(body)))
 	copy(out[lengthPrefixBytes:], body)
 	return out, nil
+}
+
+// decodeStrict decodes one inbound frame body, REFUSING any field the body's
+// schema does not declare.
+//
+// json.Unmarshal's default is to ignore an unknown field, which turns a
+// client's typo ("durations" for "duration_s") or a newer client's extra field
+// into silence plus a default the caller never asked for. That is the same
+// failure as clamping an out-of-range param: the engine quietly reinterpreting
+// a command it did not understand. The refusal names the offending field,
+// because the whole value of catching it is telling the client which one it is.
+func decodeStrict(body []byte, out any) error {
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.DisallowUnknownFields()
+	return dec.Decode(out)
 }
 
 // readFrame reads one frame body. It returns errFrameTooLarge for an

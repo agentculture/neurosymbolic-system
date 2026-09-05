@@ -334,3 +334,69 @@ func TestAFrameIsNeverVisibleOnTheQueueBeforeItIsCounted(t *testing.T) {
 		t.Errorf("queued = %d after %d accepted frames, want %d", got, frames, frames)
 	}
 }
+
+// --- finding 2: an unknown field is refused, never ignored ------------------
+
+// TestAnUnknownFieldIsRefusedOnEveryInboundKind.
+//
+// json.Unmarshal ignores a field the target struct does not declare, so a
+// client sending "durations" for "duration_s", or a v2 field to a v1 engine,
+// got silence and an intent that ran with a default it never asked for. That is
+// the same class of failure as clamping an out-of-range param: the engine
+// quietly reinterpreting a command it did not understand. This runtime's rule
+// is fail-closed — an unknown field is refused, and the refusal names it so the
+// client can see which one.
+func TestAnUnknownFieldIsRefusedOnEveryInboundKind(t *testing.T) {
+	cases := []struct {
+		name  string
+		frame map[string]any
+		// fatal is true when the violation ends the connection: a handshake
+		// this engine did not fully understand is not a handshake.
+		fatal bool
+	}{
+		{name: KindHello, fatal: true, frame: map[string]any{
+			"v": Version, "kind": KindHello, "client": "test", "bogus_field": 1}},
+		{name: KindSense, frame: map[string]any{
+			"v": Version, "kind": KindSense, "fields": map[string]any{"lux": 1.0},
+			"bogus_field": 1}},
+		{name: KindIntent, frame: map[string]any{
+			"v": Version, "kind": KindIntent, "op": OpAdmit, "action": "ramp",
+			"bogus_field": 1}},
+		{name: KindMgmt, frame: map[string]any{
+			"v": Version, "kind": KindMgmt, "id": "m1", "verb": "version",
+			"bogus_field": 1}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			handler := funcMgmt(func(json.RawMessage) json.RawMessage {
+				t.Error("the management handler ran for a frame with an unknown field")
+				return json.RawMessage(`null`)
+			})
+			r := newRig(t, nil, handler)
+			r.start(ctx)
+
+			client, _ := r.dial()
+			if !tc.fatal {
+				client.handshake()
+			}
+			client.send(tc.frame)
+
+			frame := client.recvKind(KindError)
+			message, _ := frame["message"].(string)
+			if !strings.Contains(message, "bogus_field") {
+				t.Errorf("the refusal %q does not name the unknown field", message)
+			}
+			if code, _ := frame["code"].(float64); int(code) != CodeUser {
+				t.Errorf("the refusal carries code %v, want %d", frame["code"], CodeUser)
+			}
+			if remediation, _ := frame["remediation"].(string); remediation == "" {
+				t.Error("the refusal carries no remediation")
+			}
+			if tc.name == KindSense && len(r.sense.all()) != 0 {
+				t.Errorf("the refused sense frame still reached the sink: %v", r.sense.all())
+			}
+		})
+	}
+}
