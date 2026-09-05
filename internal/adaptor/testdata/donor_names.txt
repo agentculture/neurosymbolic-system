@@ -1,0 +1,94 @@
+# Donor vocabulary names — the ONLY place in this repo they may appear.
+#
+# The engine holds no robot literal: channels, sense fields and action names are
+# declared at startup from an adaptor config (internal/adaptor), never compiled
+# in. TestNoDonorLiteralsInEngineSources reads this file and fails if any name
+# below shows up as a string literal in a non-test Go source under cmd/ or
+# internal/ (testdata excluded). If a name here starts appearing in engine
+# source, the robot leaked into the runtime — fix the source, not this file.
+#
+# Sources (read-only siblings, quoted paths are from the workspace root):
+#   reachy-mini-cli/reachy/behavior/model.py     CHANNELS
+#   reachy-mini-cli/reachy/behavior/rules.py     SENSE_FIELDS
+#   reachy-mini-cli/reachy/behavior/library.py   LIBRARY keys
+#   reachy-mini-cli/reachy/behavior/gaze.py      NAME, NAME_FACE
+#   microduck-cli/microduck_cli/behavior/model.py   CHANNELS
+#   microduck-cli/microduck_cli/behavior/sense.py   Sense fields
+#   microduck-cli/microduck_cli/behavior/intents.py KIND constants
+#
+# Lines are `name` with `#` comments and blank lines ignored. Matching is
+# whole-token: a name matches inside a literal only when it is not adjacent to
+# an alphanumeric character, so `do` does not collide with `does`.
+
+# --- channels (reachy: head/antennas/body_yaw; microduck: the other five) ---
+head
+antennas
+body_yaw
+twist
+pose
+mouth
+sound
+skill
+
+# --- reachy sense fields (rules.SENSE_FIELDS) ---
+doa
+speech
+rms
+rms_ratio
+pat
+face
+frame_available
+transcript
+self_moving
+
+# --- reachy Sense dataclass fields not already listed above ---
+doa_angle
+speech_detected
+doa_age_s
+pat_event
+face_bbox
+face_age_s
+pat_state
+
+# --- microduck sense fields ---
+fallen
+limp
+gravity
+loop_hz
+policy
+move_applied
+move_requested
+battery_frac
+hottest_servo_c
+remote_session
+mode
+pad_active
+tof_nearest_m
+skills
+enabled
+state_age_s
+health_age_s
+pad_age_s
+tof_age_s
+
+# --- reachy actions (library.LIBRARY keys) ---
+feel-alive
+pet-reaction
+face-lock
+orient-to-sound
+gaze-hold
+look-at-sound
+look-at-face
+nod
+shake
+speak
+thoughtful
+antenna-sway
+body-turn-hold
+
+# --- microduck actions (intents kinds) ---
+do
+idle
+look
+move
+stop
