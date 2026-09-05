@@ -1,0 +1,159 @@
+# The toy robot — a THIRD plant, neither Reachy Mini nor MicroDuck.
+#
+# This file exists to prove a claim the two real robots cannot prove between
+# them: that the engine holds no robot. Reachy and MicroDuck are both donors,
+# so a runtime that quietly special-cased either would still pass every test
+# written against them. A robot that never existed, with channels of arities
+# nobody has hardware for and actions nobody wrote Go for, has no special case
+# to fall back on — if it drives, the vocabulary really is data.
+#
+# It is also the h16/h4 fixture: `tests/test_e2e_toy_robot.py` drives a fresh
+# consumer from zero to a running rules-driven pose stream using only the built
+# binary, THIS file and `rules.toml`, with no engine code written at all.
+#
+# Nothing here is a robot anybody should build. The numbers are chosen to make
+# assertions legible: three channels of three different arities, four senses
+# covering three of the four declared types, and three actions covering both
+# trajectory shapes plus the looping/one-shot split.
+
+# --- channels ---------------------------------------------------------------
+# Arities 2 / 1 / 3, all different, so a pose frame that transposed two
+# channels or dropped one could not possibly still typecheck downstream.
+
+[[channels]]
+  name = "wheels"
+  arity = 2
+  neutral = [0.0, 0.0]
+
+[[channels]]
+  name = "beacon"
+  arity = 1
+  neutral = [0.0]
+
+[[channels]]
+  name = "arm"
+  arity = 3
+  neutral = [0.0, 0.0, 0.0]
+
+# --- senses -----------------------------------------------------------------
+# A bool, two floats and a string. `tag` carries an age_field so the freshness
+# of a reading is a first-class declared field rather than arithmetic somebody
+# does at the call site — everything reading one tick must agree about how old
+# a reading was.
+
+[[senses]]
+  name = "bumper"
+  type = "bool"
+
+[[senses]]
+  name = "light_level"
+  type = "float"
+
+[[senses]]
+  name = "charge"
+  type = "float"
+
+[[senses]]
+  name = "tag"
+  type = "string"
+  age_field = "tag_age_s"
+
+[[senses]]
+  name = "tag_age_s"
+  type = "float"
+
+# A DECISION PROVIDER's output field (see `neurosymbolic-engine run
+# --provider`). A provider writes its answer back into the perception snapshot
+# as an ordinary sense, so a rule keys on it exactly like a reading off a
+# sensor — the rules layer never learns a model was involved. Declaring it here
+# is what makes that legal: an output the adaptor config does not declare is a
+# field no rule is allowed to name, so the provider would run and nothing would
+# ever react to it. Configuration, not code, which is the whole point.
+[[senses]]
+  name = "mood"
+  type = "string"
+
+# --- actions ----------------------------------------------------------------
+
+# hum — the base layer: LOOPING, claims only the beacon, and is admitted
+# passive by the engine, so it owns the beacon whenever nothing else claims it
+# and never contends for anything. An idle toy robot keeps blinking.
+[[actions]]
+  name = "hum"
+  claims = ["beacon"]
+  loops = true
+
+  [[actions.params]]
+    name = "brightness"
+    min = 0.0
+    max = 1.0
+
+  [actions.trajectories]
+    [actions.trajectories.beacon]
+
+      [[actions.trajectories.beacon.keyframes]]
+        t = 0.0
+        value = [0.0]
+
+      [[actions.trajectories.beacon.keyframes]]
+        t = 0.5
+        value = [1.0]
+
+      [[actions.trajectories.beacon.keyframes]]
+        t = 1.0
+        value = [0.0]
+
+# retreat — a one-shot claiming TWO channels at once, so arbitration has
+# something with real width to resolve. Easing on both: a wheel that snapped
+# from rest to full reverse is the thing ease_in_out exists to avoid.
+[[actions]]
+  name = "retreat"
+  claims = ["wheels", "arm"]
+  loops = false
+
+  [[actions.params]]
+    name = "speed"
+    min = 0.0
+    max = 2.0
+
+  [actions.trajectories]
+    [actions.trajectories.wheels]
+      [actions.trajectories.wheels.easing]
+        kind = "ease_in_out"
+        from = [0.0, 0.0]
+        to = [-1.0, -1.0]
+        duration_s = 0.5
+
+    [actions.trajectories.arm]
+      [actions.trajectories.arm.easing]
+        kind = "linear"
+        from = [0.0, 0.0, 0.0]
+        to = [0.0, -10.0, 5.0]
+        duration_s = 0.5
+
+# wave — a one-shot on the arm alone, keyframed out and back, so a rule that
+# fires it leaves the robot where it found it.
+[[actions]]
+  name = "wave"
+  claims = ["arm"]
+  loops = false
+
+  [[actions.params]]
+    name = "amplitude"
+    min = 0.0
+    max = 30.0
+
+  [actions.trajectories]
+    [actions.trajectories.arm]
+
+      [[actions.trajectories.arm.keyframes]]
+        t = 0.0
+        value = [0.0, 0.0, 0.0]
+
+      [[actions.trajectories.arm.keyframes]]
+        t = 0.2
+        value = [15.0, 0.0, 0.0]
+
+      [[actions.trajectories.arm.keyframes]]
+        t = 0.4
+        value = [0.0, 0.0, 0.0]

@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 
 import pytest
 
 from neurosymbolic_system import __version__
-from neurosymbolic_system.cli import main
+from neurosymbolic_system.cli import _build_parser, main
 from neurosymbolic_system.explain import known_paths
+from neurosymbolic_system.explain.catalog import ENTRIES
 
 
 def test_version_flag(capsys: pytest.CaptureFixture[str]) -> None:
@@ -113,3 +115,37 @@ def test_every_catalog_path_resolves(capsys: pytest.CaptureFixture[str]) -> None
         rc = main(["explain", *path])
         assert rc == 0, f"explain {' '.join(path)} failed"
         capsys.readouterr()
+
+
+def _registered_command_paths(
+    parser: argparse.ArgumentParser, prefix: tuple[str, ...] = ()
+) -> set[tuple[str, ...]]:
+    """Walk every ``add_subparsers``/``add_parser`` level, returning each path.
+
+    A "path" is a noun/verb sequence someone could type on the command line
+    (``("engine", "status")``) — exactly the shape ``explain`` and the
+    catalog key on. Positional arguments (``explain``'s ``path``, ``rules
+    check``'s ``files``) are not subparsers and are not walked into.
+    """
+    paths: set[tuple[str, ...]] = set()
+    for action in parser._actions:  # noqa: SLF001 - argparse has no public walk API
+        if isinstance(action, argparse._SubParsersAction):
+            for name, subparser in action.choices.items():
+                path = prefix + (name,)
+                paths.add(path)
+                paths |= _registered_command_paths(subparser, path)
+    return paths
+
+
+def test_every_registered_command_path_has_a_catalog_entry() -> None:
+    """Guards against the catalog drifting behind the argparse tree (t12 review).
+
+    Walks the real, fully-registered parser tree rather than a hand-maintained
+    list, so a newly added noun/verb without a matching ``explain`` entry
+    fails this test instead of silently 404ing at runtime.
+    """
+    parser = _build_parser()
+    paths = _registered_command_paths(parser)
+    assert paths, "expected at least one registered command path"
+    missing = sorted(p for p in paths if p not in ENTRIES)
+    assert not missing, f"missing explain catalog entries for: {missing}"

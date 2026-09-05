@@ -1,0 +1,31 @@
+# WIRE PROTOCOL frame-kind tokens the engine legitimately spells as string
+# literals.
+#
+# These are subtracted from donor_names.txt before TestNoDonorLiteralsInEngine-
+# Sources runs, exactly like schema_keywords.txt. They are `kind` values of the
+# STREAM FRAMING — the protocol every consumer on the other side of the socket
+# parses, identical on every robot — that happen to collide with a word one
+# donor also uses for a channel.
+#
+# The bar for adding a line here, and it is deliberately narrower than
+# schema_keywords.txt's:
+#
+#   1. the literal is a frame `kind` token of internal/stream's wire protocol,
+#      spelled the same way for Reachy Mini, MicroDuck and a toy fixture alike;
+#   2. it is used ONLY as that token — never to name a channel, an action, or a
+#      sense field.
+#
+# A CHANNEL NAME OR AN ACTION NAME MAY NOT BE EXEMPTED HERE ON ANY GROUNDS.
+# That a token listed below is also some robot's channel name is the collision
+# this file records, not a licence to compile that robot's vocabulary into the
+# engine: the engine still learns every channel, sense and action from an
+# adaptor config, and a literal used as a robot name is a leak whatever file it
+# is listed in. Every entry carries its justification on the line above it.
+
+# `pose` is internal/stream's pose-frame `kind` — the token a consumer matches
+# to recognise "here is the complete target the engine composed this tick"
+# (stream.KindPose, pinned by TestPoseKindIsTheDeclaredWireToken). It collides
+# with microduck's `pose` channel. The engine never names that channel: the
+# only thing it spells is the frame kind, and a wire token the engine could not
+# write down would be a protocol nobody could implement.
+pose

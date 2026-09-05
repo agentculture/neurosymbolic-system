@@ -1,0 +1,24 @@
+# Derived from tests/test_behavior_rule_engine.py's
+# `test_hysteresis_requires_continuous_false_before_refire`, keyed on the field
+# the SHIPPED `look-toward-sound` rule keys on (`rms_ratio`, at the shipped
+# threshold 5.0) rather than the donor test's stand-in field.
+#
+# Two deliberate differences from the shipped rule, both required to make the
+# re-arm observable and both stated so nobody reads them as donor fact:
+#
+#   * `hysteresis = 1.0` — the shipped rule carries none; the donor asserts the
+#     semantics in the test above, not in default_rules.toml.
+#   * `duration_s = 0.5` instead of the shipped 12.0 — the donor test drives its
+#     engine with `keep_active=False`, so the admitted behavior never lingers.
+#     At 12.0 the second fire would be suppressed `already-active` instead,
+#     which is correct behaviour but not the assertion being mirrored.
+
+schema_version = 1
+
+[[react]]
+id = "look-toward-sound"
+when = { field = "rms_ratio", op = "ge", value = 5.0 }
+run = "orient-to-sound"
+duration_s = 0.5
+cooldown_s = 0.0
+hysteresis = 1.0

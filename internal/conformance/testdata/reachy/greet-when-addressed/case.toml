@@ -1,0 +1,14 @@
+# reachy / greet-when-addressed — an addressed utterance, and the `say` the
+# rule carries forwarded onto the fire event rather than spoken.
+#
+# Donor test: tests/test_behavior_default_rules.py pins this rule's
+# `run = "speak"`, `duration_s = 1.6`, `cooldown_s = 12.0` and
+# `say = "I'm here."`; tests/test_behavior_speech_rules.py is where the
+# say-is-the-voice-half pairing is asserted. This runtime FORWARDS `say` on
+# `rule.fire` and renders nothing — it owns no actuator.
+#
+# Rules: the donor's SHIPPED defaults, verbatim.
+period_ms = 250
+ticks = 10
+base_action = "feel-alive"
+rule_layers = ["default_rules.v1.toml"]

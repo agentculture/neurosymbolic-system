@@ -1,0 +1,330 @@
+{
+  "plan_slug": "go-rule-engine-core",
+  "schema_version": 2,
+  "created": "2026-09-05T06:07:14Z",
+  "updated": "2026-09-05T08:13:47Z",
+  "deviations": [
+    {
+      "id": "d1",
+      "what": "t3's adaptor config loads from JSON (encoding/json) instead of TOML: the TOML decoder lands in t2 in the same wave, and t3 must stay stdlib-only and file-disjoint from t2's go.mod change. Struct tags are shaped so a TOML front end is a small follow-up once the shared decoder is merged.",
+      "task_ref": "t3",
+      "reason": "same-wave file disjointness (go.mod) and the stdlib-only rule for t3",
+      "affects": [
+        "t3"
+      ],
+      "origin": "llm",
+      "status": "proposed",
+      "classification": null,
+      "seq": 1
+    },
+    {
+      "id": "d2",
+      "what": "Three wiring follow-ups outside any task's summary, done as t13b on a fresh worktree after t13 merged: (1) a --provider flag in the composition root so the decision provider (t10) is reachable end to end \u2014 no task covered wiring it; (2) deterministic delivery of the settle pose before the end frame in the stream's shutdown ordering \u2014 t13 found the settle pose was best-effort; (3) an automated stdio-mode end-to-end test \u2014 t13 verified stdio manually only.",
+      "task_ref": "t13",
+      "reason": "gaps found at integration: provider wiring uncovered by the plan; settle-pose ordering and stdio coverage discovered by t13",
+      "affects": [
+        "t13",
+        "t10",
+        "t8"
+      ],
+      "origin": "llm",
+      "status": "proposed",
+      "classification": null,
+      "seq": 2
+    },
+    {
+      "id": "d3",
+      "what": "Conformance replay (t14) found that 'neurosymbolic-engine run --stdio' does not exit when its stdin closes: the tick loop stops and the stopped line is written, but the process lingers until SIGTERM. Fixed as t13c on a fresh worktree by the composition-root agent: EOF on the stdio reader cancels the run context so the process exits 0 after the end frame; covered by a Go test and the stdio e2e.",
+      "task_ref": "t13",
+      "reason": "a lifecycle bug found by the conformance stdio test; no task owns it",
+      "affects": [
+        "t13",
+        "t8"
+      ],
+      "origin": "llm",
+      "status": "proposed",
+      "classification": null,
+      "seq": 3
+    }
+  ],
+  "evidence": [
+    {
+      "id": "e1",
+      "obligation_ref": "o1",
+      "test_ref": "internal/rules: TestReachy*, TestMicroduck*, TestRefusals, TestLayer*, TestTombstone*, TestSchema* (63 assertions)",
+      "behavior_text": "both donors' default_rules.toml (verbatim copies in testdata) load at schema_version 1; each documented invalid case is refused naming the rule id and path; per-id layer override and tombstones behave as the donor docstring states",
+      "contract_text": "loads both donors' schema_version = 1 default rules files unchanged and refuses each documented invalid case naming the rule id",
+      "evidence_type": "automated",
+      "strength": "sensitivity",
+      "strength_basis": "ran green at the named commit; a mutation check (defaulting a missing schema_version to 1, dropping the override winner) fails four of these tests \u2014 recorded by t2",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-05T08:12:26Z",
+        "commit": "743ace9715e3a73d61f158bd2f4f431282e2d045"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 4
+    },
+    {
+      "id": "e2",
+      "obligation_ref": "o2",
+      "test_ref": "internal/tick: TestPoseFramesMatchTheTrajectoryAtEveryRate, TestBudgetIsMeasuredAgainstTheConfiguredPeriod, TestNoWallClockInLoop; internal/ruleeval: TestCooldownIsTheMinimumSecondsBetweenFires, TestHysteresisRequiresContinuousFalseToReArm, TestDurationSCapsTheAdmittedLifetime, TestZeroHysteresisMeansCooldownAlone",
+      "behavior_text": "timing semantics hold identically at 20, 50 and 100 Hz under tick.FakeClock; a token scan proves no wall-clock read exists in the loop outside realclock.go",
+      "contract_text": "rule timing tests pass identically at 20, 50 and 100 Hz under an injected clock",
+      "evidence_type": "automated",
+      "strength": "sensitivity",
+      "strength_basis": "ran green at the named commit; t5 recorded that disabling the cooldown guard fails 6 tests and removing the suppression transition guard fails 4",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-05T08:12:26Z",
+        "commit": "743ace9715e3a73d61f158bd2f4f431282e2d045"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 5
+    },
+    {
+      "id": "e3",
+      "obligation_ref": "o3",
+      "test_ref": "internal/senselog: TestStreak* (entry, reason change, end with tick count), the grammar Parse test over every emitted line, the os.Stdout pipe test; internal/conformance: TestSenseLogIsTheOnlyDiagnosticSurface",
+      "behavior_text": "a 200-tick gated streak emits one entry, one line per reason change and one summary carrying the tick count; every line parses against the SENSE grammar; the engine's stdout carries only protocol frames",
+      "contract_text": "every drop and suppression emits one grammar-conformant stderr line per episode transition; stdout stays clean",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "ran green at the named commit, including the built binary over stdio for 50 ticks",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-05T08:12:26Z",
+        "commit": "743ace9715e3a73d61f158bd2f4f431282e2d045"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 6
+    },
+    {
+      "id": "e4",
+      "obligation_ref": "o4",
+      "test_ref": "internal/allowlist: TestImportAllowlist, TestParseAllowlistWithComment, TestParseAllowlistWithoutComment; go list -deps ./cmd/neurosymbolic-engine",
+      "behavior_text": "no robot SDK, transport or media package is in the graph; the only non-stdlib module is github.com/BurntSushi/toml carrying an '// allow:' argument in go.mod; the denylist (os/exec, plugin, database/sql, net/rpc, syscall/js, runtime/cgo, image/, debug/) is enforced",
+      "contract_text": "go list -deps of the engine contains no robot SDK, transport or media package; the only I/O packages are net, os and encoding/json",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "ran green at the named commit. NOTE on fidelity to the contract text: the I/O set is enforced as families (net incl. net/http for the provider client, os, io, encoding, bufio) plus the allowlisted TOML decoder, not the literal three packages \u2014 the guard test's family list is the operative definition",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-05T08:12:26Z",
+        "commit": "743ace9715e3a73d61f158bd2f4f431282e2d045"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 7
+    },
+    {
+      "id": "e5",
+      "obligation_ref": "o5",
+      "test_ref": "internal/mgmt: TestVerb*JSON, TestVerbStatusWithNoStatusSourceIsEnvError; cmd/neurosymbolic-engine: TestRunUnknownCommandJSON and the exit-code tests; tests/test_cli_engine.py + tests/test_engine_client.py (relay verbatim, exit 1/2)",
+      "behavior_text": "every Go error response is {code, message, remediation} with code 1 or 2, rendered as error:/hint: in text and as the JSON body under --json; the Python client relays it verbatim as CliError with the same exit code",
+      "contract_text": "every error response is {code, message, remediation} with code in {1, 2}, and the Python client relays it verbatim as a CliError with the matching exit code",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "ran green at the named commit against the freshly built binary",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-05T08:12:26Z",
+        "commit": "743ace9715e3a73d61f158bd2f4f431282e2d045"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 8
+    },
+    {
+      "id": "e6",
+      "obligation_ref": "o6",
+      "test_ref": "internal/conformance: TestDonorConformance (9 cases), TestEveryTransitionIsExactlyOneFrame, TestFixturesUseDonorRuleFilesVerbatim; docs/verification/2026-09-05-donor-conformance.md",
+      "behavior_text": "nine fixtures derived from reachy-mini-cli (e9a8f54) and microduck-cli (ea21bdf) rule tests replay identically: fire/suppress events with donor keys, ownership, pose completeness; pose VALUES are not compared (trajectories are fixture choices); contention classes beyond stoppable/passive and data-only abstention are not fixture-expressible and are listed as not reproduced",
+      "contract_text": "a fixture set of rules files and expected fire/suppress traces from both donors' tests replays identically through the engine",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "ran green at the named commit; expected traces were generated by the engine and checked case by case against the donor tests' assertions, as the verification record states",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-05T08:12:26Z",
+        "commit": "743ace9715e3a73d61f158bd2f4f431282e2d045"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 9
+    },
+    {
+      "id": "e7",
+      "obligation_ref": "o7",
+      "test_ref": "neurosymbolic-engine bench --json (200 rules, 20 fields, 10000 ticks, 20ms, 32MB ceiling) on NVIDIA DGX Spark GB10 aarch64; docs/verification/2026-09-05-arm64-bench.md; internal/bench: TestRunWithTinyBudgetOverruns",
+      "behavior_text": "p50 177 us, p99 616 us, max 1308 us, 0 overruns over 10000 ticks, steady-state RSS 10.3 MB under the 32 MB ceiling; a 1ns budget yields overruns and exit 1",
+      "contract_text": "evaluating a 200-rule file over a 20-field sense snapshot on linux/arm64 completes under the configured budget for 10,000 ticks with zero overruns, and steady-state RSS is reported",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "the recorded run at commit 3d8292d on this arm64 box (the bench code has not changed since; the success-shape tests were made contention-safe in e83d2c8)",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-05T07:40:00Z",
+        "commit": "3d8292ddabccd5275a1b8829093a0abc169a69a3"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 10
+    },
+    {
+      "id": "e8",
+      "obligation_ref": "o8",
+      "test_ref": "internal/stream: TestSenseFrameYieldsAPoseFrameWithinOneTick, TestStdioCarriesMgmtAndEndFrames, backpressure/second-connection/version/heartbeat/socket-mode tests; tests/test_e2e_toy_robot.py::test_status_over_mgmt (max tick gap <= 2 periods) and the SIGTERM/SIGKILL/stdin-close settle tests",
+      "behavior_text": "a sense frame yields a pose within one tick period; a mgmt request during the stream is answered on its own goroutine with no tick gap over two periods; slow readers drop with a named line; a second connection is refused; version mismatch refused naming both; socket is 0600 and no TCP listener exists",
+      "contract_text": "a sense frame sent on the stream produces a pose frame within one tick period, and a management request during the stream is answered without pausing the stream",
+      "evidence_type": "automated",
+      "strength": "execution",
+      "strength_basis": "ran green at the named commit, race detector clean on internal/stream",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-05T08:12:26Z",
+        "commit": "743ace9715e3a73d61f158bd2f4f431282e2d045"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 11
+    },
+    {
+      "id": "e9",
+      "obligation_ref": "o9",
+      "test_ref": "internal/tick: TestEveryPoseIsCompleteAndUnclaimedChannelsAreNeutral, TestAbstainingOwnerYieldsTheChannelTheSameTick, TestContributionAbstainsOnAChannelWithNoTrajectory, TestSettleWritesOneNeutralPoseOnExit, the 16 donor arbitration cases; internal/conformance abstain-yields-base",
+      "behavior_text": "every streamed pose fills every declared channel at its arity; unclaimed channels carry the declared neutral; an abstaining owner yields to the next claimant the same tick, never freezes; the engine settles to neutral on exit",
+      "contract_text": "every emitted pose fills every declared channel, unclaimed channels at neutral; an abstaining owner yields the channel to the next claimant, never freezes it",
+      "evidence_type": "automated",
+      "strength": "sensitivity",
+      "strength_basis": "ran green at the named commit; a wrong-arity value is refused with a named drop, never reshaped",
+      "outcome": "pass",
+      "run": {
+        "timestamp": "2026-09-05T08:12:26Z",
+        "commit": "743ace9715e3a73d61f158bd2f4f431282e2d045"
+      },
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false,
+      "seq": 12
+    }
+  ],
+  "deltas": [
+    {
+      "id": "b1",
+      "kind": "added",
+      "behavior_text": "The adaptor config loads from JSON (t3) AND from TOML via a LoadTOML front end (t9), sharing one validator; --adaptor accepts either by extension.",
+      "caused_by": [
+        "d1 (proposed deviation: JSON first for in-wave file disjointness)",
+        "c10"
+      ],
+      "evidence_refs": [],
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false
+    },
+    {
+      "id": "b2",
+      "kind": "amended",
+      "behavior_text": "Admission is total (Reachy semantics): a newcomer is always admitted and contention it cannot win resolves per tick; MicroDuck's refusal of a newcomer sharing a channel with an unstoppable/stopping incumbent is NOT an engine behaviour \u2014 the consumer reads AdmitResult.Blocked and evicts (issue #8).",
+      "caused_by": [
+        "c14",
+        "c11"
+      ],
+      "evidence_refs": [],
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false
+    },
+    {
+      "id": "b3",
+      "kind": "amended",
+      "behavior_text": "A panicking tick-seam rider or event consumer is recovered as one named senselog drop and counted in Stats.SeamPanics; the engine keeps ticking (issue #9). The donor let a raising rider propagate out of the loop.",
+      "caused_by": [
+        "c41",
+        "c15"
+      ],
+      "evidence_refs": [],
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false
+    },
+    {
+      "id": "b4",
+      "kind": "amended",
+      "behavior_text": "Event-keyed rules resolve on source/type only and are routing metadata plus a one-tick sense field; priority and urgency never feed arbitration; reachy_nova's three payload-conditional rule/fire:<id> overrides are not representable and were omitted from the transcription (issue #7).",
+      "caused_by": [
+        "c12"
+      ],
+      "evidence_refs": [],
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false
+    },
+    {
+      "id": "b5",
+      "kind": "added",
+      "behavior_text": "Rule-fired behaviors default to the stoppable contention class; a one-shot react rule with no duration_s falls back to the action's longest trajectory; the hysteresis re-arm reason token is 'rearming' (donor verbatim); say is forwarded as an event field with no speech actuator in the engine (issue #11).",
+      "caused_by": [
+        "c14",
+        "c11"
+      ],
+      "evidence_refs": [],
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false
+    },
+    {
+      "id": "b6",
+      "kind": "added",
+      "behavior_text": "The composition root gained a repeatable --provider flag; the stream flushes the settling neutral pose before the end frame; stdio mode has an automated end-to-end test; closing the child's stdin ends the engine with exit 0 and an end frame (reason stdin-closed) while a socket peer leaving keeps the engine running (deviations d2, d3).",
+      "caused_by": [
+        "d2 (proposed)",
+        "d3 (proposed)",
+        "c37",
+        "c42"
+      ],
+      "evidence_refs": [],
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false
+    },
+    {
+      "id": "b7",
+      "kind": "added",
+      "behavior_text": "The donor-literal guard matches whole literals and exempts three rules-schema keywords and one wire token (pose) via testdata lists that forbid exempting channel or action names (issues #6, #13).",
+      "caused_by": [
+        "c10"
+      ],
+      "evidence_refs": [],
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false
+    },
+    {
+      "id": "b8",
+      "kind": "added",
+      "behavior_text": "The Python test job in CI builds the Go engine and exports NEUROSYMBOLIC_ENGINE so the 17 engine-backed tests and the end-to-end tests run instead of skipping (issue #10).",
+      "caused_by": [
+        "c29",
+        "h13"
+      ],
+      "evidence_refs": [],
+      "origin": "llm",
+      "status": "proposed",
+      "superseded": false
+    }
+  ],
+  "supersessions": []
+}

@@ -1,0 +1,5 @@
+# No rules. This case is about ARBITRATION, not rule evaluation: a rules file
+# with rules in it would put a second claimant on the same channels and make
+# the handover ambiguous.
+
+schema_version = 1

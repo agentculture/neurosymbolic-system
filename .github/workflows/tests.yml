@@ -29,7 +29,23 @@ jobs:
 
       - run: uv sync
 
+      # The Python suite's engine-backed tests — the `engine`/`rules` noun
+      # groups, and the whole toy-robot end-to-end test — SKIP without a built
+      # binary named by NEUROSYMBOLIC_ENGINE. A skipped acceptance test proves
+      # nothing while looking green, so CI builds the engine here rather than
+      # leaving the Go and Python halves never tested against each other.
+      # CGO_ENABLED=0 matches how the binary actually ships (see go.yml): no
+      # libc dependency, so it runs on whatever a consumer's box is.
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: build the engine
+        run: CGO_ENABLED=0 go build -o /tmp/neurosymbolic-engine ./cmd/neurosymbolic-engine
+
       - run: uv run pytest -n auto --cov=neurosymbolic_system --cov-report=xml:coverage.xml --cov-report=term -v
+        env:
+          NEUROSYMBOLIC_ENGINE: /tmp/neurosymbolic-engine
 
       - name: SonarCloud Scan
         if: env.SONAR_TOKEN != ''
