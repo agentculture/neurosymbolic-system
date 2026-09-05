@@ -50,6 +50,40 @@ const (
 	KindInhibit = "inhibit"
 )
 
+// Event priorities, urgencies and voice hints, the donors' verbatim names
+// (reachy_nova's config/nervous-system/rules.yaml). These are ROUTING
+// METADATA — an event never feeds arbitration.
+const (
+	PriorityLow      = "LOW"
+	PriorityNormal   = "NORMAL"
+	PriorityHigh     = "HIGH"
+	PriorityCritical = "CRITICAL"
+
+	UrgencyBackground = "BACKGROUND"
+	UrgencyDeferrable = "DEFERRABLE"
+	UrgencyNow        = "NOW"
+	UrgencyImmediate  = "IMMEDIATE"
+
+	// VoiceSilent/VoiceBrief/VoiceFree still always route an event; only
+	// VoiceNone is recorded without ever being delivered (see internal/events).
+	VoiceSilent = "silent"
+	VoiceBrief  = "brief"
+	VoiceFree   = "free"
+	VoiceNone   = "none"
+)
+
+// DefaultVoice is the voice hint an entry gets when it names none.
+const DefaultVoice = VoiceFree
+
+// DefaultLLMEvaluate is llm_evaluate's default when an entry names none.
+const DefaultLLMEvaluate = true
+
+var (
+	priorities = set(PriorityLow, PriorityNormal, PriorityHigh, PriorityCritical)
+	urgencies  = set(UrgencyBackground, UrgencyDeferrable, UrgencyNow, UrgencyImmediate)
+	voices     = set(VoiceSilent, VoiceBrief, VoiceFree, VoiceNone)
+)
+
 // Schema defaults, verbatim from both donors.
 const (
 	DefaultCooldownS  = 5.0
@@ -148,6 +182,52 @@ type Rule struct {
 	Source string
 }
 
+// Event is one validated [[event]] entry — a source/type-keyed routing
+// record (priority, urgency, dedupe window key, inject template and voice
+// hint) for the event dialect. It is DATA ONLY: internal/events is the only
+// package that interprets it, and it never feeds arbitration.
+type Event struct {
+	// Source is the event source half of the "source/type" identity, e.g.
+	// "tracking", "rule", "slack".
+	Source string
+	// Type is the event type half of the "source/type" identity.
+	Type string
+	// Priority is one of the Priority* constants.
+	Priority string
+	// Urgency is one of the Urgency* constants.
+	Urgency string
+	// LLMEvaluate is carried as metadata only — no model is called here.
+	LLMEvaluate bool
+	// InjectTemplate is the optional "{name}"-style template a router
+	// renders against the event's payload. Placeholders are opaque text to
+	// this package.
+	InjectTemplate string
+	// Voice is one of the Voice* constants, defaulting to VoiceFree.
+	Voice string
+	// Sense optionally names the sensory class this event belongs to —
+	// classification metadata only, never consulted for dedupe.
+	Sense string
+	// Dedupe optionally overrides the dedupe identity a router collapses
+	// repeats under. Empty means "use source/type".
+	Dedupe string
+	// Path is the file this event entry was read from.
+	Path string
+}
+
+// ID is the event's identity and override surface, exactly like a Rule's ID:
+// same-layer duplicates are refused, a later layer overrides earlier one
+// wholesale, and enabled = false tombstones it.
+func (e Event) ID() string { return e.Source + "/" + e.Type }
+
+// EventDefault is the [event_default] table: the priority/urgency/
+// llm_evaluate/voice assigned to any event with no matching [[event]] entry.
+type EventDefault struct {
+	Priority    string
+	Urgency     string
+	LLMEvaluate bool
+	Voice       string
+}
+
 // Config is a fully validated, fully merged set of rules.
 type Config struct {
 	// SchemaVersion is the version declared by the HIGHEST layer that
@@ -165,6 +245,11 @@ type Config struct {
 	// Disabled holds the tombstoned ids that no layer defines a live rule for
 	// — carried so a still-higher layer's merge can honor them.
 	Disabled []string
+	// Events holds the merged [[event]] entries, in merged order.
+	Events []Event
+	// EventDefault is the merged [event_default] table, or nil when no layer
+	// defined one.
+	EventDefault *EventDefault
 }
 
 // ActiveModeParams returns the selected mode's parameters, and whether a mode
