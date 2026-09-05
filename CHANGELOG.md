@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-09-05
+
+### Added
+
+- Vendored the `validate-delivery` skill — the execution→evidence leg of the devague chain (behavioral tests run agent-side; `devague evidence` / `devague delta` records filed with verbatim outcomes and un-inflated strength).
+
+### Changed
+
+- Re-synced all eight devague-origin skills (`scope`, `think`, `challenge`, `spec-to-plan`, `assign-to-workforce`, `deviate`, `validate-delivery`, `summarize-delivery`) byte-identical from `../devague` at 0.24.1 (`3c25322`), picking up `amend`, `--instruction`, `interrogate --resolve`, `oblige` / `plan oblige`, `evidence`, `delta`, `today`, and the updated CLI resolvers. guildmaster's re-broadcast (0.23.1) lags on every one, so the three formerly guildmaster-cited skills now cite devague directly — logged as a widened local divergence in `docs/skill-sources.md`.
+- `CLAUDE.md` conventions name the full devague chain and add the obligations rule: plant `oblige` early, file evidence and deltas on the validate-delivery leg, never self-confirm an LLM-origin filing, and treat an unmet obligation as a warning to fix with evidence rather than silence.
+
 ## [0.8.0] - 2026-08-29
 
 ### Changed
