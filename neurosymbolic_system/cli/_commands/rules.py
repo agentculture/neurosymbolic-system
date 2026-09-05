@@ -32,6 +32,9 @@ _VERBS = [
 ]
 
 
+_JSON_HELP = "Emit structured JSON."
+
+
 def _rules_sections() -> list[dict[str, object]]:
     return [{"title": "Verbs", "items": list(_VERBS)}]
 
@@ -108,34 +111,34 @@ def register(sub: argparse._SubParsersAction) -> None:
         "rules",
         help="Delegate to the neurosymbolic-engine binary's rules verbs (see 'rules overview').",
     )
-    p.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    p.add_argument("--json", action="store_true", help=_JSON_HELP)
     p.set_defaults(func=_no_verb, json=False)
     noun_sub = p.add_subparsers(dest="rules_command", parser_class=type(p))
 
     ov = noun_sub.add_parser("overview", help="Describe the rules noun group.")
-    ov.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    ov.add_argument("--json", action="store_true", help=_JSON_HELP)
     ov.set_defaults(func=cmd_rules_overview)
 
     check = noun_sub.add_parser("check", help="Validate rules files with no robot attached.")
     check.add_argument("files", nargs="+", help="Rules file(s) to load as one layer.")
     check.add_argument("--adaptor", help="A .json/.toml adaptor config to attach a vocabulary.")
-    check.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    check.add_argument("--json", action="store_true", help=_JSON_HELP)
     check.set_defaults(func=cmd_rules_check)
 
     ls = noun_sub.add_parser("list", help="List every rule's id, kind and predicate.")
     ls.add_argument("files", nargs="+", help="Rules file(s) to load as one layer.")
     ls.add_argument("--adaptor", help="A .json/.toml adaptor config to attach a vocabulary.")
-    ls.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    ls.add_argument("--json", action="store_true", help=_JSON_HELP)
     ls.set_defaults(func=cmd_rules_list)
 
     migrate = noun_sub.add_parser("migrate", help="Write a schema_version-2 twin of a rules file.")
     migrate.add_argument("file", help="Input rules file (schema_version 1).")
     migrate.add_argument("--out", help="Output path (default: <name>.v2.<ext>).")
     migrate.add_argument("--force", action="store_true", help="Overwrite an existing --out.")
-    migrate.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    migrate.add_argument("--json", action="store_true", help=_JSON_HELP)
     migrate.set_defaults(func=cmd_rules_migrate)
 
     reload_p = noun_sub.add_parser("reload", help="Ask a live engine to re-read its rules files.")
     reload_p.add_argument("files", nargs="+", help="Rules file(s) the live engine should re-read.")
-    reload_p.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    reload_p.add_argument("--json", action="store_true", help=_JSON_HELP)
     reload_p.set_defaults(func=cmd_rules_reload)

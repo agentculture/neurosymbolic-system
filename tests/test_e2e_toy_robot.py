@@ -84,7 +84,7 @@ def engine_args(*extra: str) -> list[str]:
     ]
 
 
-@pytest.fixture()
+@pytest.fixture
 def robot(tmp_path: Path) -> Any:
     """A started, greeted toy robot, torn down however the test left it."""
     settled: list[str] = []
@@ -255,7 +255,8 @@ def test_a_protocol_mismatch_is_refused_naming_both_versions(tmp_path: Path) -> 
         bot.hello(version=2)
         assert bot.wait_for("error"), "a version-2 hello was not refused"
         refusal = bot.of_kind("error")[0]
-        assert "2" in refusal["message"] and "1" in refusal["message"], refusal
+        assert "2" in refusal["message"], refusal
+        assert "1" in refusal["message"], refusal
         assert refusal["remediation"], "the refusal named no way to fix it"
     finally:
         bot.stop()
@@ -303,7 +304,8 @@ def test_stdio_transport_streams_poses_and_ends_on_sigterm() -> None:
         bot.signal(signal.SIGTERM)
         assert bot.wait_for("end", timeout=5.0), "no end-of-stream frame after SIGTERM"
         assert bot.of_kind("end")[0]["reason"], "the end frame named no reason"
-        assert bot.settled and bot.settled[0].startswith("end:"), bot.settled
+        assert bot.settled, "settle() never ran"
+        assert bot.settled[0].startswith("end:"), bot.settled
     finally:
         bot.stop()
 
@@ -393,7 +395,8 @@ def test_closing_stdin_exits_the_engine_without_a_signal() -> None:
         assert end_at > 0, "the end frame arrived before any pose"
         assert frames[end_at - 1]["channels"] == NEUTRAL, frames[end_at - 1]["channels"]
 
-        assert bot.settled and bot.settled[0] == "end:stdin-closed", bot.settled
+        assert bot.settled, "settle() never ran"
+        assert bot.settled[0] == "end:stdin-closed", bot.settled
     finally:
         bot.stop()
 

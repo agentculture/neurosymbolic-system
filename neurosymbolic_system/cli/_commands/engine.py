@@ -26,6 +26,9 @@ _VERBS = [
 ]
 
 
+_JSON_HELP = "Emit structured JSON."
+
+
 def _engine_sections() -> list[dict[str, object]]:
     return [
         {"title": "Verbs", "items": list(_VERBS)},
@@ -79,22 +82,22 @@ def register(sub: argparse._SubParsersAction) -> None:
         "engine",
         help="Delegate to the neurosymbolic-engine binary (see 'engine overview').",
     )
-    p.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    p.add_argument("--json", action="store_true", help=_JSON_HELP)
     p.set_defaults(func=_no_verb, json=False)
     noun_sub = p.add_subparsers(dest="engine_command", parser_class=type(p))
 
     ov = noun_sub.add_parser("overview", help="Describe the engine noun group.")
-    ov.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    ov.add_argument("--json", action="store_true", help=_JSON_HELP)
     ov.set_defaults(func=cmd_engine_overview)
 
     status = noun_sub.add_parser("status", help="Report the live engine's state.")
-    status.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    status.add_argument("--json", action="store_true", help=_JSON_HELP)
     status.set_defaults(func=cmd_engine_status)
 
     version = noun_sub.add_parser("version", help="Print the engine binary's version.")
-    version.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    version.add_argument("--json", action="store_true", help=_JSON_HELP)
     version.set_defaults(func=cmd_engine_version)
 
     doctor = noun_sub.add_parser("doctor", help="Run the engine binary's own environment checks.")
-    doctor.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    doctor.add_argument("--json", action="store_true", help=_JSON_HELP)
     doctor.set_defaults(func=cmd_engine_doctor)

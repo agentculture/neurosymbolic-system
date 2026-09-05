@@ -28,14 +28,14 @@ requires_built_engine = pytest.mark.skipif(
 )
 
 
-@pytest.fixture()
+@pytest.fixture
 def no_engine(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure neither the env var nor PATH resolves an engine binary."""
     monkeypatch.delenv("NEUROSYMBOLIC_ENGINE", raising=False)
     monkeypatch.setenv("PATH", "/nonexistent")
 
 
-@pytest.fixture()
+@pytest.fixture
 def with_engine(monkeypatch: pytest.MonkeyPatch) -> str:
     assert ENGINE_PATH is not None
     monkeypatch.setenv("NEUROSYMBOLIC_ENGINE", ENGINE_PATH)
