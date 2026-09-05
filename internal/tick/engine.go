@@ -56,6 +56,16 @@ type Config struct {
 	// Log receives every named drop and stage line. Nil means stderr, which is
 	// where a SENSE line belongs — an export stdout stays pure.
 	Log *senselog.Logger
+
+	// OnTickDone, when set, is called once per tick with the elapsed wall time
+	// this package itself already computed to decide an overrun — the drain,
+	// compose, write and seam work, in that order. It exists for an external
+	// observer (internal/bench) that needs the SAME number engine.go uses for
+	// its own overrun accounting, without internal/tick ever reading the wall
+	// clock on its own behalf: the reading happens exactly once, here, via the
+	// injected Clock, and is only ever handed outward. Nil is a no-op. It runs
+	// on the tick goroutine, synchronously, so it must not block.
+	OnTickDone func(elapsed time.Duration)
 }
 
 // Bool returns a pointer to b, for Config.Settle.
@@ -539,6 +549,9 @@ func firstLine(text string) string {
 // to catch up — a skipped tick is a seam that silently did not run.
 func (e *Engine) accountBudget(tickNumber int, start time.Time) {
 	elapsed := e.clock.Now().Sub(start)
+	if e.cfg.OnTickDone != nil {
+		e.cfg.OnTickDone(elapsed)
+	}
 	if elapsed > e.cfg.Period {
 		e.overruns.Add(1)
 		e.overrun.Enter(tickNumber, "overrun")
