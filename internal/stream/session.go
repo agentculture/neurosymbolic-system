@@ -84,6 +84,50 @@ func (s *session) sendWithin(payload any, grace time.Duration) {
 	}
 }
 
+// flushWithin waits for the outbound queue to drain, bounded by the same grace.
+//
+// It is what makes the engine's SETTLING NEUTRAL POSE deterministic. That pose
+// is the last thing the tick loop writes on the way out — a robot must not be
+// left holding whatever the last tick happened to compose — and it goes onto
+// the bounded queue like any other telemetry. The end-of-stream frame, by
+// contrast, takes the DIRECT write path. Without this wait the two race for
+// wmu: the end frame can be written between two queued poses, and the shutdown
+// that follows closes the writer with the settle pose still in the queue, so
+// the consumer's last word from the robot is a pose from before the stop.
+//
+// Draining first costs nothing when the peer is reading (the queue is empty and
+// this returns on the first poll) and is bounded by the grace when it is not —
+// a wedged consumer still cannot wedge the engine's own shutdown, which is the
+// property the grace exists to protect.
+//
+// It returns once the queue is EMPTY, which means the writer has taken the last
+// frame off the channel; it may still be inside that Write. That is enough,
+// because send takes the same wmu, so an end frame issued after this returns
+// cannot overtake a write already in progress.
+func (s *session) flushWithin(grace time.Duration) {
+	if grace <= 0 {
+		return
+	}
+	deadline := time.NewTimer(grace)
+	defer deadline.Stop()
+	poll := time.NewTicker(flushPollEvery)
+	defer poll.Stop()
+	for {
+		if len(s.out) == 0 {
+			return
+		}
+		select {
+		case <-poll.C:
+		case <-s.quit:
+			return
+		case <-s.writerDone:
+			return
+		case <-deadline.C:
+			return
+		}
+	}
+}
+
 // waitWithin is wait with the same bound, for the same reason.
 func (s *session) waitWithin(grace time.Duration) {
 	timer := time.NewTimer(grace)

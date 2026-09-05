@@ -29,6 +29,25 @@ const socketMode os.FileMode = 0o600
 // A consumer that wedged must not be able to wedge the engine's own shutdown.
 const endFrameGrace = 250 * time.Millisecond
 
+// flushGrace bounds the shutdown's outbound-queue drain — see
+// session.flushWithin and closeWithReason for what it buys.
+//
+// It is its OWN constant, smaller than endFrameGrace, rather than a share of
+// it. The end frame's guarantee is the stronger of the two and must not be
+// weakened to strengthen the settle pose's: a consumer that never learns the
+// stream ended waits for a heartbeat that is never coming, which is strictly
+// worse than one whose last pose is a tick stale. So the drain gets a separate,
+// deliberately short bound, and the end frame keeps its full 250 ms after it.
+// Against a peer that has stopped reading entirely this makes a shutdown cost
+// up to 100 ms more than it used to; against one that is reading it costs
+// nothing at all, because the queue is already empty.
+const flushGrace = 100 * time.Millisecond
+
+// flushPollEvery is how often that drain re-checks the outbound queue. Short
+// next to flushGrace, so a drain that finishes early is noticed promptly, and
+// long enough that the polling costs nothing measurable.
+const flushPollEvery = time.Millisecond
+
 // Stats is the endpoint's cumulative accounting, readable from any goroutine.
 type Stats struct {
 	// FramesIn counts inbound frames that were read and dispatched.
@@ -335,6 +354,22 @@ func (s *Server) Close() { s.closeWithReason("closed") }
 // frame takes the DIRECT write path: a dropped end-of-stream leaves a consumer
 // waiting for a heartbeat that is never coming, which is the failure c37 exists
 // to close.
+//
+// The three steps happen in this order, and the order is the contract:
+//
+//  1. FLUSH what is already queued. The engine's settling neutral pose is the
+//     last thing it writes on the way out, and it rides the ordinary bounded
+//     queue; the end frame does not. Sending the end frame first would let it
+//     overtake that pose, and closing the writer first would discard it — in
+//     either case the consumer's last word from the robot would be a pose from
+//     before the stop, and settling to neutral is precisely the thing a
+//     consumer must not have to guess about.
+//  2. Send the end frame, naming why.
+//  3. Close the session and wait for the writer.
+//
+// Each step carries its own bound (flushGrace, then endFrameGrace twice), so a
+// peer that has stopped reading still cannot wedge the engine's shutdown, and
+// the end frame keeps exactly the grace it had before the flush existed.
 func (s *Server) closeWithReason(reason string) {
 	s.closeOnce.Do(func() {
 		s.mu.Lock()
@@ -347,6 +382,7 @@ func (s *Server) closeWithReason(reason string) {
 			_ = listener.Close()
 		}
 		if sess != nil {
+			sess.flushWithin(flushGrace)
 			sess.sendWithin(endOut{V: Version, Kind: KindEnd, Reason: reason},
 				endFrameGrace)
 			sess.shutdown()
