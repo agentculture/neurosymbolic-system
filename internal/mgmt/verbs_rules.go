@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
+	"reflect"
 	"strings"
 
 	"github.com/agentculture/neurosymbolic-system/internal/adaptor"
@@ -169,13 +169,6 @@ func verbRulesList(_ *Handler, args []string) (verbResult, error) {
 	return verbResult{Text: text, Value: listings}, nil
 }
 
-// schemaVersionLine matches the top-level `schema_version = 1` assignment (a
-// leading `schema_version`, an `=`, the literal 1, and nothing else but
-// whitespace or a trailing comment on the line). Migrate rewrites only this
-// one captured group so every comment, blank line and rule body in the file
-// survives byte-for-byte.
-var schemaVersionLine = regexp.MustCompile(`(?m)^(\s*schema_version\s*=\s*)1(\s*(#.*)?)$`)
-
 // verbRulesMigrate is `rules migrate <file> [--out <path>] [--force]`: write
 // a schema_version-2 twin of <file> with every rule unchanged, leaving the
 // input untouched.
@@ -226,8 +219,8 @@ func verbRulesMigrate(_ *Handler, args []string) (verbResult, error) {
 	if err != nil {
 		return verbResult{}, clifmt.NewEnvError(fmt.Sprintf("could not read %q: %v", inPath, err), "")
 	}
-	migrated := schemaVersionLine.ReplaceAllString(string(raw), "${1}2$2")
-	if migrated == string(raw) && before.SchemaVersion != rules.SchemaVersion2 {
+	migrated, rewrote := rewriteSchemaVersion(string(raw))
+	if !rewrote && before.SchemaVersion != rules.SchemaVersion2 {
 		return verbResult{}, clifmt.NewEnvError(
 			fmt.Sprintf("could not find a schema_version = 1 line to rewrite in %q", inPath),
 			"the file may already declare schema_version = 2, or use unusual formatting",
@@ -273,23 +266,60 @@ func defaultMigrateOutPath(inPath string) string {
 	return base + ".v2" + ext
 }
 
-// sameRules reports whether before and after carry the identical rule ids,
-// kinds and predicate summaries in the same order — migrate's contract that
-// bumping schema_version changes nothing else.
+// sameRules reports whether before and after are the same configuration in
+// everything but the schema version — migrate's whole contract, that bumping
+// schema_version changes nothing else.
+//
+// It compares the WHOLE loaded Config, not a hand-picked list of fields. The
+// list version compared ids, kinds, run names and predicates, and therefore
+// could not see a difference in say text, params, cooldowns, modes, the
+// active mode or the event table — which is exactly how a rewrite that
+// corrupted a multi-line `say` body passed verification and was written to
+// disk. A field this function forgets is a corruption it cannot catch, so it
+// forgets nothing by construction: any field added to rules.Config is
+// compared the day it exists.
 func sameRules(before, after *rules.Config) bool {
-	beforeAll := append(append([]rules.Rule{}, before.React...), before.Inhibit...)
-	afterAll := append(append([]rules.Rule{}, after.React...), after.Inhibit...)
-	if len(beforeAll) != len(afterAll) {
-		return false
+	return reflect.DeepEqual(comparableConfig(before), comparableConfig(after))
+}
+
+// comparableConfig is one Config reduced to the parts migrate must preserve
+// exactly. Three things are cleared, and only three:
+//
+//   - SchemaVersion, the one value migrate exists to change;
+//   - each Rule's Source and each Event's Path, which are the file each was
+//     read from — necessarily the input for one side and migrate's temporary
+//     candidate for the other, so comparing them would fail every time.
+func comparableConfig(cfg *rules.Config) rules.Config {
+	out := *cfg
+	out.SchemaVersion = 0
+	out.React = withoutSources(cfg.React)
+	out.Inhibit = withoutSources(cfg.Inhibit)
+	out.Events = withoutPaths(cfg.Events)
+	return out
+}
+
+func withoutSources(in []rules.Rule) []rules.Rule {
+	if in == nil {
+		return nil
 	}
-	for i := range beforeAll {
-		b, a := beforeAll[i], afterAll[i]
-		if b.ID != a.ID || b.Kind != a.Kind || b.Run != a.Run ||
-			predicateSummary(b.When) != predicateSummary(a.When) {
-			return false
-		}
+	out := make([]rules.Rule, len(in))
+	for i, rule := range in {
+		rule.Source = ""
+		out[i] = rule
 	}
-	return true
+	return out
+}
+
+func withoutPaths(in []rules.Event) []rules.Event {
+	if in == nil {
+		return nil
+	}
+	out := make([]rules.Event, len(in))
+	for i, event := range in {
+		event.Path = ""
+		out[i] = event
+	}
+	return out
 }
 
 // verbRulesReload is `rules reload <file>...`: ask the live engine's
