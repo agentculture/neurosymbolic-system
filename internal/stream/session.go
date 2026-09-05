@@ -338,13 +338,29 @@ func (s *session) handleHello(body []byte) bool {
 	_ = json.Unmarshal(body, &in) // the client name is informational
 	s.greeted = true
 	s.srv.note("hello", KindHello, "a client attached: "+sanitizeClient(in.Client))
-	if err := s.send(helloOut{
+	body, err := encodeFrame(helloOut{
 		V: Version, Kind: KindHello, EngineVersion: s.srv.cfg.EngineVersion,
-	}); err != nil {
+	})
+	if err != nil {
 		return false
 	}
-	// Only now may telemetry reach this peer: the hello reply is on the wire.
+	// Subscribe and write the hello reply under the same write lock. Order
+	// matters both ways: subscribing first means a tick that fires the instant
+	// the peer has read its hello is owed to it (no window in which a pose can
+	// be skipped after the greeting), and holding wmu until the hello is on the
+	// wire means the writer goroutine cannot put such a pose ahead of it.
+	s.wmu.Lock()
+	defer s.wmu.Unlock()
+	select {
+	case <-s.quit:
+		return false
+	default:
+	}
 	s.subscribed.Store(true)
+	if _, err := s.w.Write(body); err != nil {
+		return false
+	}
+	s.srv.framesOut.Add(1)
 	return true
 }
 

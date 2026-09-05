@@ -162,22 +162,11 @@ func TestTheHelloReplyPrecedesAnyTelemetry(t *testing.T) {
 	}
 	// handshake sends hello and reads the reply; a pose arriving first fails it.
 	r.client.handshake()
-	// The subscription flips a hair after the hello reply is on the wire, so a
-	// single write racing that instant may still be skipped; a real consumer
-	// keeps receiving poses from every later tick. Keep writing until one lands.
-	stop := make(chan struct{})
-	defer close(stop)
-	go func() {
-		for {
-			select {
-			case <-stop:
-				return
-			default:
-				_ = r.srv.Write(neutral)
-				time.Sleep(time.Millisecond)
-			}
-		}
-	}()
+	// Once the peer has read its hello it is subscribed: the very next write is
+	// owed to it, with no window in which a pose could still be skipped.
+	if err := r.srv.Write(neutral); err != nil {
+		t.Fatalf("Write after hello: %v", err)
+	}
 	if got := r.client.recvKind(KindPose); got == nil {
 		t.Fatal("no pose frame after the handshake")
 	}
