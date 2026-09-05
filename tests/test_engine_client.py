@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import stat
 import textwrap
@@ -9,10 +10,11 @@ from pathlib import Path
 
 import pytest
 
-from neurosymbolic_system.cli._errors import EXIT_ENV_ERROR, CliError
+from neurosymbolic_system.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, CliError
 from neurosymbolic_system.engine_client import (
     EXPECTED_PROTOCOL,
     EngineClient,
+    _error_from_json_stderr,
     check_protocol,
     find_engine,
     missing_engine_error,
@@ -155,6 +157,40 @@ def test_run_non_executable_file_raises_environment_error(tmp_path: Path) -> Non
     assert str(not_exec) in err.message
     assert "go build" in err.remediation
     assert "NEUROSYMBOLIC_ENGINE" in err.remediation
+
+
+# --- _error_from_json_stderr malformed-`code` handling ---------------------
+
+
+def test_error_from_json_stderr_accepts_valid_codes() -> None:
+    for code in (EXIT_USER_ERROR, EXIT_ENV_ERROR):
+        stderr = json.dumps({"code": code, "message": "failure", "remediation": "fix it"})
+        err = _error_from_json_stderr(code, stderr)
+        assert err.code == code
+        assert err.message == "failure"
+        assert err.remediation == "fix it"
+
+
+def test_error_from_json_stderr_non_integer_code_falls_back_to_environment_error() -> None:
+    err = _error_from_json_stderr(1, '{"code":"bad","message":"failure"}')
+    assert err.code == EXIT_ENV_ERROR
+    assert "malformed" in err.message
+    assert "failure" in err.message
+
+
+def test_error_from_json_stderr_out_of_range_code_falls_back_to_environment_error() -> None:
+    err = _error_from_json_stderr(1, '{"code":99,"message":"failure"}')
+    assert err.code == EXIT_ENV_ERROR
+    assert "malformed" in err.message
+    assert "failure" in err.message
+
+
+def test_error_from_json_stderr_bool_code_falls_back_to_environment_error() -> None:
+    # bool is an int subclass in Python; a JSON `true`/`false` code must not
+    # be silently accepted as 1/0.
+    err = _error_from_json_stderr(1, '{"code":true,"message":"failure"}')
+    assert err.code == EXIT_ENV_ERROR
+    assert "malformed" in err.message
 
 
 def test_run_directory_as_path_raises_environment_error(tmp_path: Path) -> None:

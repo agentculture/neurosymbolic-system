@@ -47,7 +47,7 @@ import subprocess  # nosec B404 - argv-list subprocess calls only, no shell
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from neurosymbolic_system.cli._errors import EXIT_ENV_ERROR, CliError
+from neurosymbolic_system.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, CliError
 
 #: Environment variable naming an explicit engine binary path (first in the
 #: resolution order — see :func:`find_engine`).
@@ -127,10 +127,26 @@ def _error_from_json_stderr(exit_code: int, stderr: str) -> CliError:
     except json_module.JSONDecodeError:
         payload = None
     if isinstance(payload, dict) and "message" in payload:
+        raw_code = payload.get("code", exit_code)
+        # `bool` is an `int` subclass in Python, so exclude it explicitly —
+        # a `code: true` body should be treated as malformed, not as `1`.
+        code = raw_code if isinstance(raw_code, int) and not isinstance(raw_code, bool) else None
+        if code is not None and code in (EXIT_USER_ERROR, EXIT_ENV_ERROR):
+            return CliError(
+                code=code,
+                message=str(payload["message"]),
+                remediation=str(payload.get("remediation", "")),
+            )
+        # A non-integer or out-of-range `code` (not 1 or 2) is a malformed
+        # error body, not a value to relay — fall back to a client-authored
+        # environment error carrying the raw stderr, per the promise above.
         return CliError(
-            code=int(payload.get("code", exit_code)),
-            message=str(payload["message"]),
-            remediation=str(payload.get("remediation", "")),
+            code=EXIT_ENV_ERROR,
+            message=(
+                "neurosymbolic-engine returned a malformed error body "
+                f"(code={raw_code!r}): {stderr.strip()}"
+            ),
+            remediation="",
         )
     return CliError(
         code=exit_code,
