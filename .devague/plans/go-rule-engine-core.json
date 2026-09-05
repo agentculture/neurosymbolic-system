@@ -3,9 +3,9 @@
   "title": "Go rule engine core",
   "frame_slug": "go-rule-engine-core",
   "schema_version": 5,
-  "status": "drafting",
+  "status": "exported",
   "created": "2026-09-05T05:19:16Z",
-  "updated": "2026-09-05T05:43:10Z",
+  "updated": "2026-09-05T05:50:59Z",
   "targets": [
     {
       "id": "c1",
@@ -395,7 +395,7 @@
     {
       "id": "c34",
       "kind": "requirement",
-      "text": "The schema carries the donor fields c11 omitted: [modes.<name>] parameter sets with a required active_mode when any mode is defined (rules.py, microduck refuses modes with no active_mode), per-rule params overrides validated against the action's declared domain, and a react rule's say text (MAX_SAY_CHARS = 500, refused never truncated) forwarded as data to a consumer-declared speech action \u2014 otherwise reachy's overlays do not 'load unchanged' (h6) and set-mode intents (c14) have nothing to select. [challenge / adjacent-systems lens: reachy/behavior/rules.py _REACT_FIELDS, _TOP_LEVEL_FIELDS; microduck rules.py active_mode refusal]",
+      "text": "The schema carries the donor fields c11 omitted: [modes.NAME] parameter sets with a required active_mode when any mode is defined (rules.py, microduck refuses modes with no active_mode), per-rule params overrides validated against the action's declared domain, and a react rule's say text (MAX_SAY_CHARS = 500, refused never truncated) forwarded as data to a consumer-declared speech action \u2014 otherwise reachy's overlays do not 'load unchanged' (h6) and set-mode intents (c14) have nothing to select. [challenge / adjacent-systems lens: reachy/behavior/rules.py _REACT_FIELDS, _TOP_LEVEL_FIELDS; microduck rules.py active_mode refusal]",
       "deferred": false,
       "deferred_reason": ""
     },
@@ -510,7 +510,7 @@
       "id": "t1",
       "summary": "Go module scaffold and CI: go.mod at repo root, cmd/neurosymbolic-engine, internal/ layout, go.yml job (vet, test, build) on a linux/amd64 + linux/arm64 matrix with CGO_ENABLED=0, and a static-binary assertion",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "go build ./... and go test ./... pass on both GOARCH=amd64 and GOARCH=arm64 in CI with CGO_ENABLED=0",
         "CI runs 'file' (or readelf) on the arm64 artifact and fails unless it is statically linked; the engine prints its version and revision from -ldflags",
@@ -529,7 +529,7 @@
       "id": "t2",
       "summary": "Rules schema and loader (internal/rules): TOML, schema_version 1 and 2, data predicates with all/any conjunction in v2, per-id merge of shipped + overlay + N files in listed order, enabled=false tombstones, fail-closed validation naming the rule id",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "Both donors' default_rules.toml files (copied verbatim into testdata/) load with schema_version = 1 and produce the expected rule ids, kinds and parameters",
         "Each documented refusal (unknown field, unknown op, missing schema_version, NaN/inf cooldown, looping action without duration_s, duplicate id within or across files, empty all/any list, unknown key beside all/any) is refused with the rule id and source path in the message",
@@ -553,7 +553,7 @@
       "id": "t3",
       "summary": "Adaptor vocabulary (internal/adaptor): channels, sense fields with types, action names with param domains declared at startup from a TOML config; the engine holds no robot literal; a rules file naming an undeclared field or action is refused at load",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "grep of the engine sources finds no channel, sense field or action name from either donor as a string literal (a test enforces the list)",
         "Loading reachy's rules against microduck's vocabulary is refused naming the undeclared field; loading against its own vocabulary succeeds",
@@ -578,7 +578,7 @@
       "id": "t4",
       "summary": "Tick core (internal/tick): parameterized period, injected clock, per-channel arbitration by class and recency with abstention, complete-pose composition with neutral fill, TargetSink interface",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "Every emitted pose fills every declared channel; an unclaimed channel is neutral; an owner returning nil for a channel yields it to the next claimant the same tick",
         "Arbitration tests for passive / stoppable / unstoppable / stopping classes match the donor's arbitration.py cases",
@@ -602,7 +602,7 @@
       "id": "t5",
       "summary": "Rule evaluation on the tick (internal/ruleeval): cooldown_s, hysteresis, duration_s, absent_for, per-episode suppression state; one admission registry for rule-fired actions and agent intents (run once, standing goal, set mode, inhibit)",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "cooldown, hysteresis, duration_s and absent_for semantics match the donor rule_engine.py docstring, asserted with an injected clock",
         "A rule-fired action and an injected intent enter the same registry; an inhibit blocks both; a standing goal is re-admitted each tick until withdrawn; set mode swaps the active mode"
@@ -621,7 +621,7 @@
       "id": "t6",
       "summary": "Event-keyed rule dialect (internal/events): source/type entries with priority, urgency, dedupe window, template and a default: entry in the same TOML loader and validator; events surface on the tick as one-tick sense fields and as a routed event record",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "reachy_nova's rules.yaml transcribed to TOML loads through the shared validator; an event with no entry resolves to the default: priority and urgency",
         "Two events sharing a dedupe key within the window collapse to one routed record; distinct keys do not"
@@ -639,7 +639,7 @@
       "id": "t7",
       "summary": "senselog (internal/senselog): the [SENSE stage=.. source=.. event=..] stderr grammar, per-episode suppression logging (entry, reason change, end with tick count), stdout never written",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "A gated streak of 200 ticks emits exactly one entry line, one line per reason change, and one summary line carrying the tick count",
         "Every drop site names its reason; a test parses every emitted line against the grammar and stdout stays empty"
@@ -658,7 +658,7 @@
       "id": "t8",
       "summary": "Stream endpoint (internal/stream): unix socket with length-prefixed JSON frames, sense frames in and pose frames out at tick rate, backpressure as a named drop, one owner per socket",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "A sense frame written on the socket yields a pose frame within one tick period in a loopback test",
         "A slow reader causes pose frames to be dropped with a named senselog line, never a blocked tick",
@@ -684,7 +684,7 @@
       "id": "t9",
       "summary": "Management endpoint and Go CLI verbs (internal/mgmt, internal/clifmt): request/response over the same socket or a one-off exec, verbs whoami / version / doctor / rules check / rules list / status, the {code, message, remediation} error body, exit 0/1/2, --json, error:/hint: on stderr",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "Every verb passes the same output-contract tests the Python CLI runs (results stdout, errors stderr, --json, exit codes)",
         "A management request during a live stream is answered without pausing the stream (measured: no tick overrun in the loopback test)",
@@ -707,7 +707,7 @@
       "id": "t10",
       "summary": "Decision provider (internal/provider): OpenAI-compatible embeddings and small-model client, warmed at startup, called from a worker behind a bounded queue with a timeout; a rule can name it as a predicate source; absence, timeout or error is an abstention with a named drop",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "A fixture provider that sleeps 2 s produces zero tick overruns and exactly one named drop line per abstention",
         "A rule bound to the provider fires on the tick after the result arrives, never on the tick that requested it",
@@ -730,7 +730,7 @@
       "id": "t11",
       "summary": "Import allowlist guard: a test that walks go list -deps of the engine command and fails on any package outside the stdlib plus this module; documents the allowlist",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "The test fails when a robot SDK, transport, media or third-party package is added to the engine's dependency graph",
         "The only I/O packages in the graph are net, os, io and encoding/json (plus a TOML decoder, if vendored, listed explicitly)"
@@ -748,7 +748,7 @@
       "id": "t12",
       "summary": "Python management surface: neurosymbolic_system/engine_client.py (stdlib socket/exec client relaying the error body verbatim as CliError), engine locator (PATH then NEUROSYMBOLIC_ENGINE), a doctor check for a missing or version-mismatched engine, and engine / rules noun groups in the Python CLI that delegate to the binary",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "pyproject.toml keeps dependencies = [] and no binary is bundled in the wheel",
         "doctor reports a missing engine as an environment error (exit 2) with the go build remediation, and a version mismatch by name",
@@ -769,7 +769,7 @@
       "id": "t13",
       "summary": "Toy-robot fixture adaptor and end-to-end test: a third robot (neither Reachy nor MicroDuck) with its own channels, senses and actions, a TOML rules file, a fixture sink, driven zero-to-pose-stream through the stream endpoint",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "The fixture adaptor is under 200 lines and contains no arbitration, validation, timing or drop-logging code",
         "The end-to-end test starts the built binary, streams a sense trace, and asserts the pose trace and the senselog lines",
@@ -795,7 +795,7 @@
       "id": "t14",
       "summary": "Conformance fixtures from both donors: rules files plus sense traces in, expected fire / suppress / pose traces out, derived from reachy-mini-cli and microduck-cli rule tests (read-only in those repos), replayed through the engine; records the donor commit shas and line counts cited in the spec",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "Every fixture replays byte-identically; a diff names the rule id and tick on mismatch",
         "docs/verification records the donor commits, the wc/grep counts behind c24, and states that the consumer-side swap is the consumers' work",
@@ -817,7 +817,7 @@
       "id": "t15",
       "summary": "Bench verb and arm64 verification record: engine bench prints tick p50 / p99, overrun count and steady-state RSS for a 200-rule / 20-field load over 10,000 ticks; one run on an arm64 box is committed under docs/verification with the commit sha",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "bench exits non-zero when any tick overruns the configured budget or RSS exceeds the configured ceiling",
         "docs/verification/<date>-arm64-bench.md records the box, commit, p50, p99, overruns and RSS"
@@ -837,7 +837,7 @@
       "id": "t16",
       "summary": "Docs and hand-off: README adaptor guide (channels, senses, actions, sink, rules, the two transports, motor safety stays on the motor-control surface), CLAUDE.md moved from design brief to as-built, CHANGELOG, and one communicate issue per consumer repo announcing the engine \u2014 with a test asserting no commit in the branch touches a path outside this repo",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "acceptance_criteria": [
         "A maintainer can follow the README guide to integrate the toy robot without reading engine sources (reviewed by ask-colleague explore)",
         "A repo test asserts the branch's diff against main contains no path outside the repository root",

@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-09-05T04:43:37Z",
-  "updated": "2026-09-05T05:42:54Z",
+  "updated": "2026-09-05T05:50:59Z",
   "claims": [
     {
       "id": "c1",
@@ -693,7 +693,7 @@
       "kind": "requirement",
       "text": "The schema carries the donor fields c11 omitted: [modes.NAME] parameter sets with a required active_mode when any mode is defined (rules.py, microduck refuses modes with no active_mode), per-rule params overrides validated against the action's declared domain, and a react rule's say text (MAX_SAY_CHARS = 500, refused never truncated) forwarded as data to a consumer-declared speech action \u2014 otherwise reachy's overlays do not 'load unchanged' (h6) and set-mode intents (c14) have nothing to select. [challenge / adjacent-systems lens: reachy/behavior/rules.py _REACT_FIELDS, _TOP_LEVEL_FIELDS; microduck rules.py active_mode refusal]",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h29",
