@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-09-05T04:43:37Z",
-  "updated": "2026-09-05T05:18:36Z",
+  "updated": "2026-09-05T05:19:27Z",
   "claims": [
     {
       "id": "c1",
@@ -724,7 +724,7 @@
     {
       "id": "s6",
       "surface": "../reachy_nova/config/nervous-system/rules.yaml + CLAUDE.md (nova_mqtt.py, harness/bus.py)",
-      "finding": "A different rule dialect: entries keyed by source/type event (tracking/snap_detected ...) with priority, urgency, llm_evaluate, inject_template, voice, sense, dedupe and a default: entry; events arrive over MQTT nova/events/<source>/<type> and route to the voice model. reachy_nova is a ReachyMiniApp with heavy deps (boto3, ultralytics, nemo_toolkit) and is a reference, not a consumer.",
+      "finding": "A different rule dialect: entries keyed by source/type event (tracking/snap_detected ...) with priority, urgency, llm_evaluate, inject_template, voice, sense, dedupe and a default: entry; events arrive over MQTT topics nova/events/SOURCE/TYPE and route to the voice model. reachy_nova is a ReachyMiniApp with heavy deps (boto3, ultralytics, nemo_toolkit) and is a reference, not a consumer.",
       "seeds": [
         "c12",
         "c15",
