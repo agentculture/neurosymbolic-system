@@ -332,28 +332,40 @@ above its three base deps is the model.
   `ask-colleague`'s own `$TMPDIR` worktrees are exempt — tool-managed, deleted on
   an EXIT trap.
 
-## Working across the three repos
+## Working across the sibling repos — read them, never write them
 
-The sibling paths are `../reachy-mini-cli`, `../reachy_nova`, `../microduck-cli`
-(per-machine overrides live in `.claude/skills.local.yaml`; see the committed
-`.example`).
+The sibling paths are `../reachy-mini-cli`, `../microduck-cli`, `../arm101-cli`,
+`../reachy_nova` and `../culture-nodes` (per-machine overrides live in
+`.claude/skills.local.yaml`; see the committed `.example`).
 
-- **Read the donor before you write.** A donor module's docstring usually carries
-  the constraint that shaped it, and `reachy-mini-cli/CLAUDE.md` plus
-  `docs/verification/` + `docs/evidence/` carry the hardware measurements. Port
-  the *reason*, not just the code.
-- **A port is a two-repo change.** Extracting a module here means the donor grows
-  a dependency on this package and deletes its copy; land the seam here first,
-  then the consumer swap, and say so in both PRs. Use the `communicate` skill to
-  file the sibling-repo issue.
-- **Propagate to both robots.** The donor has an all-backends rule (a feature in
-  one agent backend is a bug); the analogue here is that a seam serving only
-  Reachy Mini is not extracted yet. Check the shape against MicroDuck before
-  declaring a port done.
-- **`reachy_nova` is a reference, not a consumer.** It is a `ReachyMiniApp`
-  plugin with its own ~50 Hz loop and its own threading model. Cite its patterns
-  (sensory log, nervous-system rules, priority cascade, the AEC-channel mono
-  read) — do not plan to make it import this package.
+**This repo is the only repo this agent changes.** Every sibling has its own
+agent, and code in a sibling is that agent's to write. We open the siblings to
+*learn* — a donor module's docstring carries the constraint that shaped it,
+`reachy-mini-cli/CLAUDE.md` plus its `docs/verification/` + `docs/evidence/`
+carry the hardware measurements, `culture-nodes` carries the Python-over-Go
+pattern — and we ship the engine here. Consumers pull the new engine and test it
+on their side, in their own PRs, on their own schedule (frame decision c31 in
+`.devague/`). Concretely:
+
+- **Never open a PR, commit, or edit a file in a sibling checkout.** Not even
+  a one-line doc fix. If a sibling needs something from us (a fixture, a
+  conformance trace, a schema note), it ships *here* and the sibling is told.
+- **Tell, don't do.** When the next step lives in a sibling — "microduck-cli can
+  now load its overlay through the engine", "reachy-mini-cli's `engine.py` is
+  covered by o6's conformance fixtures" — file the issue there with the
+  `communicate` skill (`post-issue.sh`; it auto-signs) and stop. The sibling's
+  agent decides when and how.
+- **Port the reason, not just the code.** A number quoted from a donor comes
+  with what the donor used it for (see the locator-vs-filter lesson above). A
+  seam shape is checked against *both* robots' engines — `reachy/behavior/` and
+  `microduck_cli/behavior/` — before it is declared general; a seam serving only
+  one robot is not extracted yet.
+- **`reachy_nova` and `culture-nodes` are references, not consumers.**
+  `reachy_nova` is a `ReachyMiniApp` plugin with its own ~50 Hz loop; cite its
+  sensory log, nervous-system rules and priority cascade, never plan to make it
+  import this package. `culture-nodes` is the Python-CLI-over-Go-daemon
+  precedent (`culture_nodes/api_client.py`, `internal/clifmt`); cite the shape,
+  don't share code.
 
 ## Layout
 

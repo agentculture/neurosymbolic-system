@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "drafting",
   "created": "2026-09-05T04:43:37Z",
-  "updated": "2026-09-05T05:06:46Z",
+  "updated": "2026-09-05T05:14:15Z",
   "claims": [
     {
       "id": "c1",
@@ -12,7 +12,14 @@
       "text": "neurosymbolic-system ships as one static Go binary: the rule engine that powers rule-based CLI actions for any robot \u2014 event-based and tick-based rules from one or many YAML files, an optional embedding/small-model fast path, driven from Python by reachy-mini-cli, microduck-cli and arm101-cli through a thin stdlib client the way culture-nodes drives its Go control plane; each robot adds only adaptors and configuration",
       "origin": "user",
       "status": "confirmed",
-      "honesty_conditions": [],
+      "honesty_conditions": [
+        {
+          "id": "h16",
+          "text": "A fresh consumer \u2014 the fixture toy robot in this repo's tests, neither Reachy nor MicroDuck \u2014 goes from zero to a running rules-driven pose stream using only the built binary, a channel / sense / action config, and a TOML rules file, with no engine code written.",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
       "hard_questions": [],
       "links": [],
       "instruction": "",
@@ -28,7 +35,7 @@
         {
           "id": "h1",
           "text": "A single statically linked linux/arm64 binary (CGO_ENABLED=0) built from this repo runs the engine on a Jetson-class box with no Python, libc version or SDK on the load path; ldd reports 'not a dynamic executable'.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -42,12 +49,12 @@
       "kind": "requirement",
       "text": "Rules are event-based and tick-based, scalable to many rules, loaded from one TOML file or many.",
       "origin": "user",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h2",
           "text": "The same loader reads a tick-predicate rules file and an event-keyed rules file, from one path or a list of paths, and merges them per rule id in listed order; a duplicate id across files is refused naming both sources.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -72,7 +79,7 @@
         {
           "id": "h3",
           "text": "A rule can name a decision provider (embedding or small model) as its predicate source, the provider is an injected client with a timeout, and when it is absent, slow or erroring the rule abstains with a named drop and the tick is not delayed.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -91,7 +98,7 @@
         {
           "id": "h4",
           "text": "A consumer integrates by supplying exactly: a channel list, a sense-field vocabulary with providers, an action vocabulary with a sink, and rules files \u2014 and touches no engine code. Proven by a fixture 'toy robot' adaptor in this repo's tests that is neither Reachy nor MicroDuck.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -106,7 +113,14 @@
       "text": "On a robot, power, memory and CPU are scarce and latency is the product; a Go core keeps the rules layer on-device with a low memory footprint and a predictable per-tick cost.",
       "origin": "user",
       "status": "confirmed",
-      "honesty_conditions": [],
+      "honesty_conditions": [
+        {
+          "id": "h17",
+          "text": "Measured on linux/arm64 and recorded under docs/verification: steady-state RSS of the engine under a 200-rule, 20-field load stays under a published ceiling (proposed 32 MB), and per-tick evaluation stays inside the configured budget with zero overruns over 10,000 ticks; both numbers are printed by an 'engine bench' verb.",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
       "hard_questions": [],
       "links": [],
       "instruction": "",
@@ -118,7 +132,14 @@
       "text": "Robot CLI maintainers (reachy-mini-cli, microduck-cli, arm101-cli) and the agents and humans who author rules for a deployed robot.",
       "origin": "user",
       "status": "confirmed",
-      "honesty_conditions": [],
+      "honesty_conditions": [
+        {
+          "id": "h18",
+          "text": "A robot CLI maintainer can integrate from the README's adaptor guide alone, and a rules author can validate a file with 'rules check' with no robot attached and no engine running; both paths are exercised by tests.",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
       "hard_questions": [],
       "links": [],
       "instruction": "",
@@ -129,7 +150,7 @@
       "kind": "assumption",
       "text": "The Python side of each consumer is a thin stdlib client of the Go binary, mirroring culture-nodes' culture_nodes/api_client.py: urllib only, zero deps, the {code, message, remediation} error body relayed verbatim as a CliError.",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [],
       "hard_questions": [],
       "links": [],
@@ -141,7 +162,7 @@
       "kind": "assumption",
       "text": "Two donors, not one: the extraction source is reachy-mini-cli's reachy/behavior/ AND microduck-cli's microduck_cli/behavior/ (its decision c20, extraction-first), and the Go loader must accept both robots' existing schema_version = 1 rules.toml overlays or ship a documented migration.",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [],
       "hard_questions": [
         {
@@ -161,12 +182,12 @@
       "kind": "requirement",
       "text": "Channels, sense fields and action names are per-robot configuration supplied by the adaptor, never constants in the core: reachy has ('head','antennas','body_yaw') and 13 sense fields, microduck has ('twist','head','pose','mouth','sound','skill') and 20+ sense fields, arm101 has neither yet.",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h5",
           "text": "The engine binary contains no channel name, sense field or action name as a literal; all three arrive at startup from the adaptor's configuration, and a rules file naming an undeclared field or action is refused at load.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -180,12 +201,12 @@
       "kind": "requirement",
       "text": "Rule semantics port from the donors: per-id override across a shipped layer and a box-local overlay, enabled = false tombstones, cooldown_s / hysteresis / duration_s, data predicates {field, op, value} with all / any conjunction in schema_version = 2, fail-closed validation naming the offending rule id, schema_version refused when missing, NaN/inf refused, looping actions required to carry duration_s, and rule ids treated as a public interface.",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h6",
           "text": "Both donors' shipped default rules files (reachy-mini-cli default_rules.toml, microduck-cli default_rules.toml, schema_version = 1) load unchanged, and each documented refusal case (unknown field, missing schema_version, NaN cooldown, looping action without duration_s, duplicate id) is refused with the rule id in the message.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -205,12 +226,12 @@
       "kind": "requirement",
       "text": "A second rule dialect is expressible in the same loader: event-keyed rules (source/type -> priority, urgency, llm_evaluate, dedupe, inject template, a default: entry) as in reachy_nova's config/nervous-system/rules.yaml, so 'event based' and 'tick based' rules share one file format and one validator.",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h7",
           "text": "reachy_nova's config/nervous-system/rules.yaml, transcribed to TOML, loads through the same validator as a tick rules file, and an event with no matching entry resolves to the default: entry's priority and urgency.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -232,12 +253,12 @@
       "kind": "requirement",
       "text": "The tick rate is a parameter, not 50 Hz baked in: reachy-mini-cli's rule_engine.py records ~23 Hz measured on the deployed robot (#99), and cadence-dependent tunings are a named bug class in the donor CLAUDE.md.",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h8",
           "text": "The tick period is a startup parameter; the engine passes its rule-timing tests (cooldown_s, hysteresis, duration_s, absent_for) identically at 20 Hz, 50 Hz and 100 Hz with an injected clock.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -251,12 +272,12 @@
       "kind": "requirement",
       "text": "One admission inbox serves rule-fired and agent-injected intents alike (run once, standing goal, set mode, inhibit): the donor's intents.py namespaced spool and microduck's single admission registry are the two existing shapes.",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h9",
           "text": "A rule-fired action and an agent-injected intent (run once, standing goal, set mode, inhibit) enter the same admission registry and are arbitrated by the same class and recency rules; an inhibit blocks both sources alike.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -270,12 +291,12 @@
       "kind": "requirement",
       "text": "Every drop names its reason on stderr in the [SENSE stage=... source=... event=...] grammar (reachy_nova sensory_log.py -> donor senselog), and gated streaks log per episode, not per tick (donor #99: 6722 drop lines in a 3 h window before the fix).",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h10",
           "text": "Every suppression and every provider drop writes exactly one stderr line in the [SENSE stage=<stage> source=<source> event=<event>] grammar at streak entry, on reason change, and at streak end with the tick count; stdout carries nothing but results.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -289,12 +310,12 @@
       "kind": "requirement",
       "text": "linux/arm64 is the first-class build target (Jetson Orin and Thor, DGX Spark, the Reachy wireless unit \u2014 the only platforms microduck-cli's README records), linux/amd64 for dev; CGO off so the binary has no libc coupling.",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h11",
           "text": "The release build matrix is linux/arm64 and linux/amd64 only, CGO off, and go vet / go test run on both in CI.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -308,8 +329,15 @@
       "kind": "boundary",
       "text": "The Go core never links a robot SDK, transport or media stack; the pose sink, sense peeks, speech and intent inbox are adaptors in the consumer, as the donor's TargetSink / SenseProviders seams already prescribe (18 donor files still import reachy.cli._errors or reachy.daemon \u2014 that debt stays on the donor side).",
       "origin": "llm",
-      "status": "proposed",
-      "honesty_conditions": [],
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h19",
+          "text": "go list -deps of the engine command contains no robot SDK, transport or media package; a test asserts an import allowlist (stdlib plus this module) and fails on any addition.",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
       "hard_questions": [],
       "links": [],
       "instruction": "",
@@ -320,8 +348,15 @@
       "kind": "boundary",
       "text": "No model inference runs inside the core process: the embedding / small-model fast path is an injected provider behind a timeout with a named drop, off the tick thread \u2014 the donor's reachy/stash/embeddings.py already talks to a local OpenAI-compatible /v1/embeddings gateway (Qwen3-Embedding-0.6B) over stdlib HTTP.",
       "origin": "llm",
-      "status": "proposed",
-      "honesty_conditions": [],
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h20",
+          "text": "The decision provider client is warmed at startup and called from a worker behind a bounded queue; a fixture provider that sleeps 2 s produces zero tick overruns and exactly one named drop line per abstention.",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
       "hard_questions": [
         {
           "id": "q3",
@@ -340,8 +375,15 @@
       "kind": "boundary",
       "text": "The Python agent-first CLI (whoami / learn / explain / doctor, the teken rubric gate) stays as the introspection surface; the Go binary mirrors its error contract (exit 0/1/2, error: / hint: lines, --json) the way culture-nodes' internal/clifmt does.",
       "origin": "llm",
-      "status": "proposed",
-      "honesty_conditions": [],
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h21",
+          "text": "The Go binary's whoami / doctor / version verbs emit error: and hint: lines on stderr, results on stdout, exit 0 / 1 / 2, and honor --json \u2014 asserted by the same contract tests the Python CLI already runs.",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
       "hard_questions": [],
       "links": [],
       "instruction": "",
@@ -352,8 +394,15 @@
       "kind": "boundary",
       "text": "Motion rendering and the behavior library stay in the consumer (reachy's 39 LIBRARY entries with Param domains, microduck's skills); the core arbitrates named actions it does not know how to render.",
       "origin": "llm",
-      "status": "proposed",
-      "honesty_conditions": [],
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h22",
+          "text": "The engine ships no motion primitive: an action is an opaque name plus params validated against the adaptor's declared domain, and the fixture sink receives the name and params unchanged.",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
       "hard_questions": [],
       "links": [],
       "instruction": "",
@@ -364,7 +413,7 @@
       "kind": "non_goal",
       "text": "reachy_nova does not import or run this binary; it is cited for the event/priority rule shape and the sensory log, per its own CLAUDE.md ('a reference, not a consumer'), and its dependency set (boto3, ultralytics, nemo_toolkit) is out of the question here.",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [],
       "hard_questions": [],
       "links": [],
@@ -376,7 +425,7 @@
       "kind": "non_goal",
       "text": "No cross-process hardware arbitration in the core: one SDK client, one media session, heartbeat liveness (behavior/liveness.py in both donors) stay the consumer's problem.",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [],
       "hard_questions": [],
       "links": [],
@@ -388,7 +437,7 @@
       "kind": "non_goal",
       "text": "Consumers gain no Python runtime dependency: pyproject.toml stays dependencies = [] in all three CLIs (a stated rule in each CLAUDE.md); what they gain is a binary plus a stdlib client, vendored cite-don't-import or imported from this package.",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [],
       "hard_questions": [],
       "links": [],
@@ -400,8 +449,15 @@
       "kind": "before_state",
       "text": "Today each robot CLI carries its own copy of the rules layer: reachy-mini-cli (~20k lines across behavior/ + motion/, 18 files importing CLI or daemon internals), microduck-cli (a second, extraction-first engine with schema_version = 1), and arm101-cli has none and would be the third copy.",
       "origin": "llm",
-      "status": "proposed",
-      "honesty_conditions": [],
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h23",
+          "text": "The cited counts hold at the recorded commits: reachy-mini-cli behavior/ + motion/ about 20k lines with 18 files importing reachy.cli._errors or reachy.daemon; microduck-cli behavior/ requiring schema_version = 1; arm101-cli with no behavior package \u2014 re-verifiable by wc and grep at those commits.",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
       "hard_questions": [],
       "links": [],
       "instruction": "",
@@ -412,8 +468,15 @@
       "kind": "after_state",
       "text": "A robot CLI depends on one binary and one rules schema; adding a robot means writing adaptors for its channels, senses and sink, plus a rules file \u2014 no rule engine, validator, arbitration or drop-logging code of its own.",
       "origin": "llm",
-      "status": "proposed",
-      "honesty_conditions": [],
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h24",
+          "text": "The fixture toy robot adaptor in tests/ is under 200 lines and contains no arbitration, validation, timing or drop-logging code of its own.",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
       "hard_questions": [],
       "links": [],
       "instruction": "",
@@ -424,8 +487,15 @@
       "kind": "success_signal",
       "text": "microduck-cli and reachy-mini-cli, on their own side and in their own PRs, load their existing schema_version = 1 rules.toml overlays through the Go engine with zero behavior change on the robot (their live suites pass); this repo ships the engine and a conformance fixture set, not the consumer swap.",
       "origin": "llm",
-      "status": "proposed",
-      "honesty_conditions": [],
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h25",
+          "text": "A conformance fixture set derived from both donors' rule tests (rules file + sense trace in, expected fire / suppress / pose trace out) replays byte-identically through the engine; the consumer-side swap is explicitly out of scope and listed as the consumers' work.",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
       "hard_questions": [],
       "links": [],
       "instruction": "",
@@ -442,8 +512,15 @@
       "kind": "success_signal",
       "text": "Per-tick evaluation of a loaded rule set on the target arm64 box stays under a measured budget (a number set by the tick-rate decision, well inside the donor's 20 ms at 50 Hz), with steady-state RSS reported alongside.",
       "origin": "llm",
-      "status": "proposed",
-      "honesty_conditions": [],
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h26",
+          "text": "An 'engine bench' verb prints tick p50 / p99 and overrun count for the 200-rule / 20-field load plus steady-state RSS, and one recorded run on an arm64 box is committed under docs/verification with the commit sha.",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
       "hard_questions": [],
       "links": [],
       "instruction": "",
@@ -459,7 +536,7 @@
         {
           "id": "h12",
           "text": "The engine exposes both a persistent stream endpoint (unix socket, length-prefixed JSON frames, senses in and pose out at tick rate) and a one-off request endpoint for management verbs (rules check, rules list, status); a consumer can use either without the other.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -486,7 +563,7 @@
         {
           "id": "h13",
           "text": "The Python package gains no runtime dependency and no bundled binary; it locates the engine on PATH or via NEUROSYMBOLIC_ENGINE, and doctor reports a missing or version-mismatched engine as a named environment error with the go build remediation.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -513,7 +590,7 @@
         {
           "id": "h14",
           "text": "Given a channel list and behaviors claiming channels, the engine's per-tick output is a complete pose (every channel filled, unclaimed ones neutral), streamed at the configured period; a consumer supplies only the sink.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -528,7 +605,14 @@
       "text": "Only this repo is touched by this work. Donor repos (reachy-mini-cli, microduck-cli, arm101-cli, reachy_nova) are read to learn; they pull the new engine and test on their side, in their own PRs.",
       "origin": "user",
       "status": "confirmed",
-      "honesty_conditions": [],
+      "honesty_conditions": [
+        {
+          "id": "h27",
+          "text": "No commit in this work touches a path outside this repository; every sibling-facing need is filed as an issue through the communicate skill and listed in the delivery summary.",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
       "hard_questions": [],
       "links": [],
       "instruction": "",
@@ -540,7 +624,14 @@
       "text": "Collision and allowed-motion safety for the motors lives on the lower-level surface that controls the motors, where it is faster. The engine supports safety-style reactive rules only when motor state is fed in as events, and that is not the fast path.",
       "origin": "user",
       "status": "confirmed",
-      "honesty_conditions": [],
+      "honesty_conditions": [
+        {
+          "id": "h28",
+          "text": "The engine performs no motor-level collision or limit check; motor-state rules work only when the adaptor declares those fields as senses, and the adaptor guide states that the fast path for motor safety is the consumer's motor-control surface.",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
       "hard_questions": [],
       "links": [],
       "instruction": "",
@@ -556,7 +647,7 @@
         {
           "id": "h15",
           "text": "Schema version 2 accepts all: and any: lists of predicates (nesting to one level), rejects empty lists and an unknown key beside them, and every schema-1 file still loads under the schema-2 validator; no rule text is executed as code.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -694,7 +785,7 @@
       "behavior": "loads both donors' schema_version = 1 default rules files unchanged and refuses each documented invalid case naming the rule id",
       "source_text": "Rule semantics port from the donors: per-id override across a shipped layer and a box-local overlay, enabled = false tombstones, cooldown_s / hysteresis / duration_s, data predicates {field, op, value} with all / any conjunction in schema_version = 2, fail-closed validation naming the offending rule id, schema_version refused when missing, NaN/inf refused, looping actions required to carry duration_s, and rule ids treated as a public interface.",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o2",
@@ -703,7 +794,7 @@
       "behavior": "rule timing tests pass identically at 20, 50 and 100 Hz under an injected clock",
       "source_text": "The tick rate is a parameter, not 50 Hz baked in: reachy-mini-cli's rule_engine.py records ~23 Hz measured on the deployed robot (#99), and cadence-dependent tunings are a named bug class in the donor CLAUDE.md.",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o3",
@@ -712,7 +803,7 @@
       "behavior": "every drop and suppression emits one grammar-conformant stderr line per episode transition; stdout stays clean",
       "source_text": "Every drop names its reason on stderr in the [SENSE stage=... source=... event=...] grammar (reachy_nova sensory_log.py -> donor senselog), and gated streaks log per episode, not per tick (donor #99: 6722 drop lines in a 3 h window before the fix).",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o4",
@@ -721,7 +812,7 @@
       "behavior": "go list -deps of the engine contains no robot SDK, transport or media package; the only I/O packages are net, os and encoding/json",
       "source_text": "The Go core never links a robot SDK, transport or media stack; the pose sink, sense peeks, speech and intent inbox are adaptors in the consumer, as the donor's TargetSink / SenseProviders seams already prescribe (18 donor files still import reachy.cli._errors or reachy.daemon \u2014 that debt stays on the donor side).",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o5",
@@ -730,7 +821,7 @@
       "behavior": "every error response is {code, message, remediation} with code in {1, 2}, and the Python client relays it verbatim as a CliError with the matching exit code",
       "source_text": "The Python agent-first CLI (whoami / learn / explain / doctor, the teken rubric gate) stays as the introspection surface; the Go binary mirrors its error contract (exit 0/1/2, error: / hint: lines, --json) the way culture-nodes' internal/clifmt does.",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o6",
@@ -739,7 +830,7 @@
       "behavior": "a fixture set of rules files and expected fire/suppress traces from both donors' tests replays identically through the engine",
       "source_text": "microduck-cli and reachy-mini-cli, on their own side and in their own PRs, load their existing schema_version = 1 rules.toml overlays through the Go engine with zero behavior change on the robot (their live suites pass); this repo ships the engine and a conformance fixture set, not the consumer swap.",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o7",
@@ -748,7 +839,7 @@
       "behavior": "evaluating a 200-rule file over a 20-field sense snapshot on linux/arm64 completes under the configured budget for 10,000 ticks with zero overruns, and steady-state RSS is reported",
       "source_text": "Per-tick evaluation of a loaded rule set on the target arm64 box stays under a measured budget (a number set by the tick-rate decision, well inside the donor's 20 ms at 50 Hz), with steady-state RSS reported alongside.",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o8",
@@ -757,7 +848,7 @@
       "behavior": "a sense frame sent on the stream produces a pose frame within one tick period, and a management request during the stream is answered without pausing the stream",
       "source_text": "Two transports, each serving a purpose: a persistent stream (unix socket or stdio) for constant communication and control at tick rate, and a one-off per-command call for management verbs. Which one a robot uses depends on its integration surface.",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     },
     {
       "id": "o9",
@@ -766,7 +857,7 @@
       "behavior": "every emitted pose fills every declared channel, unclaimed channels at neutral; an abstaining owner yields the channel to the next claimant, never freezes it",
       "source_text": "The Go engine owns the whole tick \u2014 arbitration, composition, pose streaming \u2014 the heavy surface; consumers keep only adaptors and configuration.",
       "origin": "llm",
-      "status": "proposed"
+      "status": "approved"
     }
   ]
 }

@@ -201,15 +201,17 @@ markdownlint-cli2 "**/*.md" "#node_modules" "#.local" "#.claude/skills" "#.teken
 A `pr lint --extra=tests,version,markdown` ask is filed upstream
 ([devex#41](https://github.com/agentculture/devex/issues/41)).
 
-### Extraction PRs are two-repo changes
+### Extraction PRs touch this repo only
 
-Porting a module out of `reachy-mini-cli` lands in two repos: the seam
-here first, then the consumer swap that deletes the donor's copy. Say
-so in **both** PR bodies, and file the sibling-repo issue with the
-`communicate` skill before the second one goes up. If the PR touches
-the tick contract (channels, arbitration classes, the `tick_seam`
-signature, the `Sense` shape), name every consumer it obliges to change
-— today `reachy-mini-cli` and `microduck-cli`.
+This agent never commits to, opens a PR on, or edits a sibling checkout
+(`reachy-mini-cli`, `microduck-cli`, `arm101-cli`, `reachy_nova`,
+`culture-nodes`) — each has its own agent, and consumer swaps are their
+work (frame decision c31). A PR here that changes the tick contract
+(channels, arbitration classes, the stream frame, the rules schema)
+names every consumer it obliges to change — today `reachy-mini-cli` and
+`microduck-cli` — and files the sibling-repo issue with the
+`communicate` skill so their agents pick it up. Fixtures, conformance
+traces and schema notes a sibling needs ship *here*.
 
 ## Reply etiquette
 
