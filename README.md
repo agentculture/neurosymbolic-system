@@ -431,18 +431,26 @@ refused naming both versions, and the connection is closed.
 
 #### What the consumer must do on disconnect
 
-The engine's own tick loop keeps running until it is told to stop (a signal,
-or — over `--stdio` — its stdin closing, which stops the tick loop and emits
-the `[SENSE stage=compose source=run event=stopped]` line; *unverified*
-whether the process itself also exits on stdin closing alone — the
-conformance record notes that today it does not, and a supervising consumer
-sends `SIGTERM`, which does exit cleanly). A consumer that loses its
-connection (socket closed, an `end` frame received, or two heartbeat
-intervals pass with no beat — the watchdog case, for a hard-killed engine
-that sends no `end`) must settle its robot to neutral itself: the engine
-holds no hardware, so it cannot do this for you. `tests/toy_robot/client.py`'s
-`ToyRobot.settle()` is the reference shape — a single idempotent hook run at
-most once, from either the `end` frame or the heartbeat watchdog.
+Over `--stdio`, the parent owns the engine's lifetime: closing the child's
+stdin stops the tick loop gracefully, flushes a settling neutral pose, sends
+an `end` frame naming reason `stdin-closed`, and the process itself exits `0`
+within a few milliseconds — no signal needed. This is verified behaviour, not
+an assumption: `internal/compose`'s `TestClosingStdinStopsTheEngineCleanly`
+drives exactly this from the Go side, and `tests/test_e2e_toy_robot.py`'s
+`test_closing_stdin_exits_the_engine_without_a_signal` drives it end to end
+against the built binary.
+
+Over `--socket-dir`, a peer disconnecting is a **different** event: it does
+**not** stop the engine — the tick loop keeps running (an idle robot with no
+consumer connected still has a base layer to hold), and the socket is simply
+freed for the next owner to connect. A consumer that loses its socket
+connection (the connection drops, an `end` frame is received on some other
+path, or two heartbeat intervals pass with no beat — the watchdog case, for a
+hard-killed engine that sends no `end`) must settle its own robot to neutral:
+the engine holds no hardware, so it cannot do this for you.
+`tests/toy_robot/client.py`'s `ToyRobot.settle()` is the reference shape — a
+single idempotent hook run at most once, from either the `end` frame or the
+heartbeat watchdog.
 
 ### The decision provider
 
