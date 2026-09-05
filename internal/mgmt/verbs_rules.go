@@ -234,21 +234,30 @@ func verbRulesMigrate(_ *Handler, args []string) (verbResult, error) {
 		)
 	}
 
-	if err := os.WriteFile(dest, []byte(migrated), 0o600); err != nil {
-		return verbResult{}, clifmt.NewEnvError(fmt.Sprintf("could not write %q: %v", dest, err), "")
-	}
-
-	after, err := rules.LoadFile(dest, nil)
-	if err != nil || !sameRules(before, after) {
-		_ = os.Remove(dest)
-		detail := "the migrated file does not load"
-		if err != nil {
-			detail = err.Error()
+	// The migrated bytes are validated in a TEMP file beside dest and only
+	// then renamed over it. dest is never opened for writing and never
+	// removed: with --force it may be a file an operator already has, and
+	// neither a partial write nor a failed validation may cost them it.
+	verify := func(tmpPath string) error {
+		after, loadErr := rules.LoadFile(tmpPath, nil)
+		if loadErr != nil {
+			return loadErr
 		}
-		return verbResult{}, clifmt.NewEnvError(
-			fmt.Sprintf("migrating %q produced a different rule set: %s", inPath, detail),
-			"this is a bug in migrate's schema_version rewrite, not a mistake in the input",
-		)
+		if !sameRules(before, after) {
+			return errDifferentRuleSet
+		}
+		return nil
+	}
+	if err := replaceFileAtomically(dest, []byte(migrated), verify); err != nil {
+		var verifyErr *verificationError
+		if errors.As(err, &verifyErr) {
+			return verbResult{}, clifmt.NewEnvError(
+				fmt.Sprintf("migrating %q produced a different rule set: %s", inPath, verifyErr.cause),
+				"this is a bug in migrate's schema_version rewrite, not a mistake in "+
+					"the input; the previous "+dest+" is untouched",
+			)
+		}
+		return verbResult{}, clifmt.NewEnvError(fmt.Sprintf("could not write %q: %v", dest, err), "")
 	}
 
 	text := fmt.Sprintf("rules: migrated %s -> %s (schema_version %d)", inPath, dest, rules.SchemaVersion2)
