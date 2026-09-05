@@ -16,6 +16,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/agentculture/neurosymbolic-system/internal/clifmt"
 	"github.com/agentculture/neurosymbolic-system/internal/compose"
@@ -51,9 +52,20 @@ Commands:
   rules list <file>...    list every rule's id, kind and predicate
   rules migrate <file>    write a schema_version-2 twin of a rules file
   rules reload <file>...  ask a live engine to re-read its rules files
+  help                    print this usage
 
 Run "neurosymbolic-engine run" with no flags for that command's own usage.
 `
+
+// helpVerb prints usageText on STDOUT and exits 0.
+//
+// It is not a mgmt verb: the usage text is this front end's own, and the
+// socket front answers mgmt frames where a screen of argv help would mean
+// nothing. It exists because a usage screen is a RESULT — an operator who
+// asked for help got what they asked for — and the two-line error contract
+// leaves nowhere else to put one. Before it, the only way to see the command
+// list was to trigger a failure.
+const helpVerb = "help"
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -66,9 +78,20 @@ func run(args []string, stdout, stderr *os.File) int {
 	jsonMode := clifmt.HasJSONFlag(args)
 	rest, _ := clifmt.StripJSONFlag(args)
 
+	handler := &mgmt.Handler{Version: version, Revision: revision}
+
+	// A usage screen is not an error rendering. Both argv shapes that used to
+	// print one — no command at all, and a noun group with no sub-verb — are
+	// refusals, so they go through the SAME two-line error contract every
+	// other failure uses (and honor --json, which a screen of text cannot).
+	// `help` is where the usage screen lives now.
 	if len(rest) == 0 {
-		fmt.Fprint(stderr, usageText)
-		return clifmt.ExitUser
+		return emitError(stderr, jsonMode, clifmt.NewUserError(
+			"no command given", remediation(handler.VerbNames(), "")))
+	}
+
+	if rest[0] == helpVerb {
+		return emitHelp(stdout, jsonMode, handler.VerbNames())
 	}
 
 	// `run` is not a mgmt verb: it does not answer a question and return, it
@@ -81,11 +104,14 @@ func run(args []string, stdout, stderr *os.File) int {
 
 	verb, verbArgs, ok := mgmt.ParseVerb(rest)
 	if !ok {
-		fmt.Fprint(stderr, usageText)
-		return clifmt.ExitUser
+		// ParseVerb refuses exactly one non-empty shape: a noun group with no
+		// sub-verb. There is no verb to dispatch, so the refusal is rendered
+		// here rather than as an unknown command named "".
+		return emitError(stderr, jsonMode, clifmt.NewUserError(
+			fmt.Sprintf("no sub-command given for '%s'", rest[0]),
+			remediation(handler.VerbNames(), rest[0]+" ")))
 	}
 
-	handler := &mgmt.Handler{Version: version, Revision: revision}
 	resp := handler.Handle(mgmt.Request{Verb: verb, Args: verbArgs, JSON: jsonMode})
 
 	if resp.Stdout != "" {
@@ -95,4 +121,44 @@ func run(args []string, stdout, stderr *os.File) int {
 		fmt.Fprint(stderr, resp.Stderr)
 	}
 	return resp.Code
+}
+
+// emitError renders one argv-level refusal through the shared contract —
+// "error:"/"hint:" on stderr in text mode, one JSON object in --json mode —
+// and returns its exit code.
+func emitError(stderr *os.File, jsonMode bool, err *clifmt.CliError) int {
+	_ = clifmt.Emit(stderr, err, jsonMode)
+	return err.Code
+}
+
+// emitHelp writes the usage screen to STDOUT as a result: the text verbatim,
+// or, under --json, the same content as a structured object, so a caller
+// parsing this CLI never has to scrape a screen.
+func emitHelp(stdout *os.File, jsonMode bool, verbs []string) int {
+	if jsonMode {
+		_ = clifmt.EmitResultJSON(stdout, map[string]any{
+			"usage":    usageText,
+			"commands": append([]string{compose.Verb, helpVerb}, verbs...),
+		})
+		return clifmt.ExitSuccess
+	}
+	fmt.Fprint(stdout, usageText)
+	return clifmt.ExitSuccess
+}
+
+// remediation is the hint half of the two argv-level refusals: how to get the
+// usage screen, plus the commands that would have been valid here. prefix
+// narrows the list to one noun group ("rules "), or lists everything when it
+// is empty.
+func remediation(verbs []string, prefix string) string {
+	names := make([]string, 0, len(verbs)+1)
+	if prefix == "" {
+		names = append(names, compose.Verb)
+	}
+	for _, name := range verbs {
+		if strings.HasPrefix(name, prefix) {
+			names = append(names, name)
+		}
+	}
+	return "run 'neurosymbolic-engine " + helpVerb + "' or one of: " + strings.Join(names, ", ")
 }

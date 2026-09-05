@@ -135,7 +135,12 @@ func ParseVerb(tokens []string) (verb string, args []string, ok bool) {
 // verbNames is the sorted verb list, in the user-facing spelling ("rules
 // check", not the internal dispatch key "rules.check"), for an "unknown
 // command" remediation.
-func (h *Handler) verbNames() []string {
+//
+// It is EXPORTED because the argv front needs the same list for the two
+// refusals it renders before a Request exists at all — "no command given" and
+// a noun group with no sub-verb. Rebuilding that list by hand in main.go is
+// how a CLI ends up advertising a verb it no longer has.
+func (h *Handler) VerbNames() []string {
 	verbs := h.verbs()
 	names := make([]string, 0, len(verbs))
 	for name := range verbs {
@@ -153,7 +158,7 @@ func (h *Handler) Handle(req Request) Response {
 	if !ok {
 		err := clifmt.NewUserError(
 			fmt.Sprintf("unknown command %q", req.Verb),
-			"known commands: "+strings.Join(h.verbNames(), ", "),
+			"known commands: "+strings.Join(h.VerbNames(), ", "),
 		)
 		return h.renderError(err, req.JSON)
 	}
