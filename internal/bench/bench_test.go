@@ -1,6 +1,7 @@
 package bench_test
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -10,6 +11,16 @@ import (
 // smallConfig mirrors the fast configuration t15 asks the acceptance test to
 // use: small enough to run in well under a second, but the same shape as a
 // real run — leaf and group predicates, an inhibit rule, a real ticker.
+//
+// Its 5ms period is generous against this package's own synthetic load on a
+// quiet box, but NOT generous against a noisy one: `go test ./...` runs every
+// package's tests in parallel, and a real-clock bench sharing the machine
+// with everything else can and does overrun occasionally. Tests below must
+// never assert a specific pass/fail outcome for this config — only that
+// whatever outcome happened is internally consistent. See
+// TestRunWithTinyBudgetOverruns for the one deterministic overrun assertion,
+// and TestRunDefaultConfigHasNoOverrunsStrict for a genuine "this box is
+// fast enough" assertion gated behind an env var.
 func smallConfig() bench.Config {
 	cfg := bench.DefaultConfig()
 	cfg.Rules = 20
@@ -19,7 +30,7 @@ func smallConfig() bench.Config {
 	return cfg
 }
 
-func TestRunReportsShapeAndPasses(t *testing.T) {
+func TestRunReportsShapeAndConsistency(t *testing.T) {
 	cfg := smallConfig()
 	result, err := bench.Run(cfg)
 	if err != nil {
@@ -43,20 +54,30 @@ func TestRunReportsShapeAndPasses(t *testing.T) {
 	if result.RSSMB <= 0 {
 		t.Errorf("RSSMB = %v, want > 0 (this process is definitely resident)", result.RSSMB)
 	}
-	if result.RSSCeilingMB != float64(cfg.RSSCeiling)/(1024*1024) {
-		t.Errorf("RSSCeilingMB = %v, want %v", result.RSSCeilingMB, float64(cfg.RSSCeiling)/(1024*1024))
+	wantCeiling := float64(cfg.RSSCeiling) / (1024 * 1024)
+	if result.RSSCeilingMB != wantCeiling {
+		t.Errorf("RSSCeilingMB = %v, want %v", result.RSSCeilingMB, wantCeiling)
 	}
-	if !result.OK {
-		t.Errorf("OK = false, want true for a generous 5ms period and 32MB ceiling: %+v", result)
-	}
-	if result.Overruns != 0 {
-		t.Errorf("Overruns = %d, want 0", result.Overruns)
+
+	// This is the load-bearing assertion, and it must hold under ANY timing
+	// outcome — including a tick that overran under contention from a
+	// parallel `go test ./...` run: OK is a pure function of Overruns and
+	// RSSMB against the ceiling, never an assumption that this run passed.
+	wantOK := result.Overruns == 0 && result.RSSMB <= result.RSSCeilingMB
+	if result.OK != wantOK {
+		t.Errorf("OK = %v, want %v (overruns=%d rss_mb=%v rss_ceiling_mb=%v)",
+			result.OK, wantOK, result.Overruns, result.RSSMB, result.RSSCeilingMB)
 	}
 	if table := result.Table(); table == "" {
 		t.Error("Table() is empty")
 	}
 }
 
+// TestRunWithTinyBudgetOverruns is acceptance criterion 1's deterministic
+// exit-1 case: a 1ns budget cannot be met by any tick regardless of what
+// else is running on the box, so Overruns > 0 and OK == false are asserted
+// unconditionally here — this is the ONE test in this package allowed to
+// assert a specific overrun outcome.
 func TestRunWithTinyBudgetOverruns(t *testing.T) {
 	cfg := smallConfig()
 	cfg.Ticks = 50
@@ -91,7 +112,13 @@ func TestRunRefusesBadConfig(t *testing.T) {
 	}
 }
 
-func TestRunIsDeterministic(t *testing.T) {
+// TestRunTickCountIsDeterministic checks the one number a real-clock run can
+// actually promise across two runs under load: the tick COUNT, which the
+// ticker drives regardless of timing outcome. Overrun counts and raw timing
+// numbers are deliberately not compared here — they vary under contention by
+// construction, and asserting their equality is exactly the flake this
+// rewrite removes.
+func TestRunTickCountIsDeterministic(t *testing.T) {
 	cfg := smallConfig()
 	a, err := bench.Run(cfg)
 	if err != nil {
@@ -101,9 +128,34 @@ func TestRunIsDeterministic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	// Timing numbers vary run to run; the seeded sense feed and the resulting
-	// tick count and overrun count must not.
-	if a.Ticks != b.Ticks || a.Overruns != b.Overruns {
-		t.Errorf("two runs of the same config disagree: %+v vs %+v", a, b)
+	if a.Ticks != cfg.Ticks || b.Ticks != cfg.Ticks {
+		t.Fatalf("Ticks = %d, %d, want both == %d", a.Ticks, b.Ticks, cfg.Ticks)
+	}
+}
+
+// TestRunDefaultConfigHasNoOverrunsStrict is the genuine "this box meets the
+// spec's default 200-rule/20-field/10,000-tick/20ms budget with zero
+// overruns" assertion — the one this package's other tests deliberately do
+// NOT make, because it is only meaningful on a quiet box (this is exactly
+// what docs/verification/*.md records by hand for the arm64 box). It is
+// skipped unless NEUROSYMBOLIC_BENCH_STRICT=1 is set, which the verification
+// record run sets explicitly; a shared CI runner running `go test ./...`
+// alongside every other package's tests does not, and must not.
+func TestRunDefaultConfigHasNoOverrunsStrict(t *testing.T) {
+	if os.Getenv("NEUROSYMBOLIC_BENCH_STRICT") != "1" {
+		t.Skip("set NEUROSYMBOLIC_BENCH_STRICT=1 to run the genuine zero-overrun assertion " +
+			"under the full default config (200 rules/20 fields/10,000 ticks/20ms — " +
+			"~200s on a real clock, and only meaningful on a quiet box)")
+	}
+	result, err := bench.Run(bench.DefaultConfig())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Overruns != 0 {
+		t.Errorf("Overruns = %d, want 0 under the default config with NEUROSYMBOLIC_BENCH_STRICT=1: %+v",
+			result.Overruns, result)
+	}
+	if !result.OK {
+		t.Errorf("OK = false, want true: %+v", result)
 	}
 }
