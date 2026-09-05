@@ -688,6 +688,109 @@ func TestBudgetIsMeasuredAgainstTheConfiguredPeriod(t *testing.T) {
 	}
 }
 
+// A rider that panics loses its turn on that tick and NOTHING else: the pose
+// already streamed, the loop keeps ticking on schedule, the drop names the
+// reason once, and the engine still accepts commands afterwards. A dead tick
+// loop would leave a robot frozen at whatever the last pose happened to be,
+// which is the worse failure.
+func TestASeamPanicIsIsolatedFromTheLoop(t *testing.T) {
+	const period = 20 * time.Millisecond
+	h := newHarness(t, period, nil)
+
+	h.eng.Send(SetSeamCmd{Seam: func(ctx TickContext) {
+		if ctx.Tick == 3 {
+			panic("a rider blew up\nwith a second line")
+		}
+	}})
+	h.start()
+	h.clock.Advance(10 * period)
+
+	stats := h.eng.Stats()
+	if stats.Ticks != 10 {
+		t.Fatalf("Stats().Ticks = %d, want 10: a seam panic must not stop the loop",
+			stats.Ticks)
+	}
+	if stats.SeamPanics != 1 {
+		t.Fatalf("Stats().SeamPanics = %d, want 1", stats.SeamPanics)
+	}
+	if len(h.poses()) != 10 {
+		t.Fatalf("streamed %d poses, want 10 (the settle has not happened yet)",
+			len(h.poses()))
+	}
+	h.assertComplete(h.poses())
+
+	var panics []senselog.Line
+	for _, line := range h.logLines() {
+		if line.Dropped && line.Reason == "panic" {
+			panics = append(panics, line)
+		}
+	}
+	if len(panics) != 1 {
+		t.Fatalf("got %d panic drop lines, want exactly 1: %+v", len(panics), panics)
+	}
+	if panics[0].Source != "seam" {
+		t.Fatalf("the panic drop names source %q, want seam", panics[0].Source)
+	}
+	if panics[0].Detail != "a rider blew up" {
+		t.Fatalf("the panic drop detail = %q, want the recovered value's first line "+
+			"(a multi-line detail would break the one-line grammar)", panics[0].Detail)
+	}
+
+	// The engine is still taking work: admit a behavior through the inbox and
+	// watch it drive its channel on the next tick.
+	if !h.eng.Send(AdmitCmd{Behavior: Behavior{
+		Name: "after", Class: ClassStoppable, Channels: []string{"ch_a"},
+		Lifetime:   Lifetime{Loops: true},
+		Contribute: func(float64) Contribution { return Contribution{"ch_a": {4, 4}} },
+	}}) {
+		t.Fatal("the inbox refused a command after the panic")
+	}
+	h.clock.Advance(period)
+	if err := h.stop(); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	poses := h.poses()
+	if poses[10]["ch_a"][0] != 4 {
+		t.Fatalf("tick 11 ch_a = %v, want the behavior admitted after the panic driving it",
+			poses[10]["ch_a"])
+	}
+}
+
+// One panicking event consumer cannot silence another: each callback is
+// isolated, and every panic is its own named drop.
+func TestAPanickingEventConsumerDoesNotSilenceTheOthers(t *testing.T) {
+	const period = 20 * time.Millisecond
+	h := newHarness(t, period, nil)
+
+	var before, after int
+	h.eng.OnEvent(func(Event) { before++ })
+	h.eng.OnEvent(func(Event) { panic("this consumer is broken") })
+	h.eng.OnEvent(func(Event) { after++ })
+
+	h.eng.Send(SetSeamCmd{Seam: func(ctx TickContext) {
+		ctx.Emit(Event{Name: "observed"})
+	}})
+	h.start()
+	h.clock.Advance(3 * period)
+	if err := h.stop(); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if before != 3 || after != 3 {
+		t.Fatalf("consumers ran %d and %d times, want 3 each: a panicking consumer "+
+			"must not silence the ones around it", before, after)
+	}
+	if got := h.eng.Stats().SeamPanics; got != 3 {
+		t.Fatalf("Stats().SeamPanics = %d, want 3 (one per tick)", got)
+	}
+	for _, line := range h.logLines() {
+		if line.Dropped && line.Reason == "panic" && line.Source != "event" {
+			t.Fatalf("a consumer panic was reported with source %q, want event",
+				line.Source)
+		}
+	}
+}
+
 // Nothing this package emits may reach stdout, and everything it emits must
 // parse as SENSE grammar — logLines() would have failed the test otherwise.
 func TestEveryEmittedLineIsSenseGrammar(t *testing.T) {

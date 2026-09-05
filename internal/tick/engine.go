@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -74,9 +75,20 @@ type Event struct {
 // prediction.
 //
 // Rules, sense drivers, the goto lane, export feeds and metrics are all pure
-// consumers of this seam. The engine adds NO error isolation around it (the
-// donor's contract): a seam composes its own fault-isolating fan-out, so one
-// rider failing never silently eats another.
+// consumers of this seam.
+//
+// A PANIC in the seam is RECOVERED and does not take the loop down. It is
+// emitted as one named senselog drop (source "seam", reason "panic"), counted
+// in Stats.SeamPanics, and the loop continues to the next tick; the pose this
+// tick already streamed is unaffected, because the seam runs after the write.
+// The donor let a raising rider propagate out of run(); on a robot that trades
+// one broken rider for a dead tick loop and a machine frozen at whatever the
+// last pose happened to be, which is the worse failure.
+//
+// Isolation is not a licence to swallow. The engine recovers, names the drop
+// and keeps ticking; it does not retry the seam and it does not repair it. A
+// seam composing several riders should still isolate them from each other —
+// this recover is a last resort for the tick, not a fan-out.
 type TickSeam func(TickContext)
 
 // Command is something another goroutine asks the engine to do. Every state
@@ -99,11 +111,16 @@ func (EvictCmd) isCommand()   {}
 func (SetSeamCmd) isCommand() {}
 
 // Stats is the engine's cumulative accounting, readable from any goroutine.
+//
+// SeamPanics counts the recovered panics from the tick seam and from event
+// consumers. It is a NAMED SUBSET of Drops: every one of them is also a named
+// drop line, so a grep of the log and a read of the counters agree.
 type Stats struct {
 	Ticks      uint64
 	Overruns   uint64
 	Drops      uint64
 	SinkErrors uint64
+	SeamPanics uint64
 }
 
 // activeBehavior is one live behavior plus the tick-goroutine-owned state the
@@ -145,6 +162,7 @@ type Engine struct {
 	drops      atomic.Uint64
 	sinkErrors atomic.Uint64
 	inboxDrops atomic.Uint64
+	seamPanics atomic.Uint64
 
 	mu        sync.RWMutex
 	consumers []func(Event)
@@ -254,6 +272,7 @@ func (e *Engine) Stats() Stats {
 		Overruns:   e.overruns.Load(),
 		Drops:      e.drops.Load(),
 		SinkErrors: e.sinkErrors.Load(),
+		SeamPanics: e.seamPanics.Load(),
 	}
 }
 
@@ -474,16 +493,44 @@ func (e *Engine) write(pose adaptor.Pose) error {
 	return nil
 }
 
+// invokeSeam calls the installed seam exactly once, isolating a panic in it
+// from the loop. A rider that panics loses its turn on this tick and nothing
+// else: the pose has already streamed, the drop names the reason, and the next
+// tick happens on schedule. A dead tick loop leaves a robot frozen at whatever
+// the last pose happened to be, which is a worse failure than one broken
+// rider.
 func (e *Engine) invokeSeam(now time.Time, tickNumber int, contribs map[string]Contribution) {
 	if e.seam == nil {
 		return
 	}
+	defer e.recoverPanic("seam")
 	e.seam(TickContext{
 		Now:      now,
 		Tick:     tickNumber,
 		engine:   e,
 		contribs: contribs,
 	})
+}
+
+// recoverPanic turns a panic into one named drop and a counter. It is a
+// deferred call, so the caller returns normally and the loop continues.
+func (e *Engine) recoverPanic(source string) {
+	recovered := recover()
+	if recovered == nil {
+		return
+	}
+	e.seamPanics.Add(1)
+	e.log.drop(source, "callback", "panic", firstLine(fmt.Sprint(recovered)))
+}
+
+// firstLine is the recovered value reduced to something that fits the SENSE
+// grammar's one-line shape: a panic value carrying a newline would otherwise
+// split one drop into two unparseable lines.
+func firstLine(text string) string {
+	if i := strings.IndexByte(text, '\n'); i >= 0 {
+		return text[:i]
+	}
+	return text
 }
 
 // accountBudget counts an overrunning tick and reports overrun EPISODES rather
@@ -515,13 +562,21 @@ func (e *Engine) settle() {
 	}
 }
 
+// emit fans an event out to every registered consumer, isolating each one: a
+// consumer that panics is a named drop and the REST STILL RUN, so one broken
+// consumer cannot silence another.
 func (e *Engine) emit(event Event) {
 	e.mu.RLock()
 	consumers := e.consumers
 	e.mu.RUnlock()
 	for _, fn := range consumers {
-		fn(event)
+		e.callConsumer(fn, event)
 	}
+}
+
+func (e *Engine) callConsumer(fn func(Event), event Event) {
+	defer e.recoverPanic("event")
+	fn(event)
 }
 
 // TickContext is the per-tick seam contract. The engine builds one fresh each
