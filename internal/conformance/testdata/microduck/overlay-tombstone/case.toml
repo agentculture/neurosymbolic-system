@@ -1,0 +1,15 @@
+# microduck / overlay-tombstone — one line in a box-local overlay disables a
+# shipped rule without forking its body.
+#
+# Donor tests: tests/test_rules.py `test_merge_enabled_false_tombstones_base_rule`
+# and `test_tombstone_react_rule`; the shipped file's own header states the
+# precedence ("an overlay tombstone (`enabled = false`) removes the shipped
+# rule of that id").
+#
+# The senses are the stop-when-limp case's, unchanged. The whole assertion is
+# that with the tombstone in force NOTHING fires — same robot, same reading,
+# one line of overlay.
+period_ms = 20
+ticks = 20
+base_action = "idle"
+rule_layers = ["default_rules.toml", "tombstone.toml"]
