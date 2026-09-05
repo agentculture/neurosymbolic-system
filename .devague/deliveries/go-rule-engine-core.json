@@ -1,0 +1,24 @@
+{
+  "plan_slug": "go-rule-engine-core",
+  "schema_version": 2,
+  "created": "2026-09-05T06:07:14Z",
+  "updated": "2026-09-05T06:07:14Z",
+  "deviations": [
+    {
+      "id": "d1",
+      "what": "t3's adaptor config loads from JSON (encoding/json) instead of TOML: the TOML decoder lands in t2 in the same wave, and t3 must stay stdlib-only and file-disjoint from t2's go.mod change. Struct tags are shaped so a TOML front end is a small follow-up once the shared decoder is merged.",
+      "task_ref": "t3",
+      "reason": "same-wave file disjointness (go.mod) and the stdlib-only rule for t3",
+      "affects": [
+        "t3"
+      ],
+      "origin": "llm",
+      "status": "proposed",
+      "classification": null,
+      "seq": 1
+    }
+  ],
+  "evidence": [],
+  "deltas": [],
+  "supersessions": []
+}

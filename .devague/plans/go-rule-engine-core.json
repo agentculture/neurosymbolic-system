@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-09-05T05:19:16Z",
-  "updated": "2026-09-05T05:50:59Z",
+  "updated": "2026-09-05T06:07:14Z",
   "targets": [
     {
       "id": "c1",
@@ -873,8 +873,8 @@
       "text": "A Go toolchain and module cache are needed on the robot box for go build; a fresh box without network cannot fetch modules \u2014 vendor the module tree in-repo (go mod vendor) so the build is offline-capable",
       "kind": "unknown_nonblocking",
       "task_id": "t1",
-      "resolved": false,
-      "resolution": ""
+      "resolved": true,
+      "resolution": "go mod vendor committed so 'go build -mod=vendor' works offline on a robot box"
     },
     {
       "id": "r3",
@@ -889,8 +889,8 @@
       "text": "A TOML decoder is not in Go's stdlib; either vendor a minimal decoder or accept one pinned third-party module, recorded in go.mod with the argument next to the pin (dependency policy)",
       "kind": "unknown_nonblocking",
       "task_id": "t2",
-      "resolved": false,
-      "resolution": ""
+      "resolved": true,
+      "resolution": "github.com/BurntSushi/toml pinned in go.mod with an '// allow:' argument comment (the convention t11's guard reads); pure Go, no transitive deps"
     }
   ],
   "obligations": []
