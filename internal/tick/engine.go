@@ -376,7 +376,10 @@ func (e *Engine) drainInbox() {
 func (e *Engine) apply(cmd Command) {
 	switch c := cmd.(type) {
 	case AdmitCmd:
-		if _, err := e.admit(c.Behavior); err != nil {
+		// admit names a duplicate id itself, with its own reason — re-reporting
+		// it here as the generic "refused" would put two lines on stderr for
+		// one refusal and hide the more specific of the two.
+		if _, err := e.admit(c.Behavior); err != nil && !errors.Is(err, errDuplicateID) {
 			e.log.drop("admit", behaviorLabel(c.Behavior), "refused", err.Error())
 		}
 	case EvictCmd:
@@ -398,6 +401,11 @@ func (e *Engine) admit(b Behavior) (AdmitResult, error) {
 	}
 	if bound.ID == "" {
 		bound.ID = e.nextID(bound.Name)
+	} else if e.idIsActive(bound.ID) {
+		err := fmt.Errorf("%w: the behavior id %q is already active — give this "+
+			"behavior its own id, or evict the live one first", errDuplicateID, bound.ID)
+		e.log.drop("admit", bound.ID, "duplicate-id", err.Error())
+		return AdmitResult{}, err
 	}
 	if bound.AdmittedAt.IsZero() {
 		bound.AdmittedAt = e.clock.Now()
@@ -442,9 +450,43 @@ func (e *Engine) evict(name string) int {
 	return removed
 }
 
+// errDuplicateID is the refusal for an explicit behavior id that is already
+// live. It is a sentinel so apply can tell it from a binding refusal and let
+// admit's more specific drop line stand alone.
+//
+// The id is the only handle arbitration (which resolves an owner by id),
+// composition (which samples contributions keyed by id) and eviction have on a
+// behavior. Two live behaviors sharing one lets arbitration name an owner while
+// composition samples the other's contribution — a mismatch nothing downstream
+// can detect, since both answers are individually well-formed. So a duplicate
+// is refused at the door rather than admitted as an ambiguity.
+var errDuplicateID = errors.New("tick: duplicate behavior id")
+
+// idIsActive reports whether a behavior with this id is already live.
+func (e *Engine) idIsActive(id string) bool {
+	for _, ab := range e.active {
+		if ab.behavior.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// nextID mints an id for a behavior that supplied none.
+//
+// It skips any id already live: the counter alone is not enough, because a
+// client is free to choose the very string the counter is about to produce
+// ("ramp-1"), and refusing an AUTO-generated id would punish a caller for a
+// collision it did not cause. Auto-generated ids are unique BY CONSTRUCTION;
+// only an explicit one can be refused.
 func (e *Engine) nextID(name string) string {
-	e.seq++
-	return fmt.Sprintf("%s-%d", name, e.seq)
+	for {
+		e.seq++
+		candidate := fmt.Sprintf("%s-%d", name, e.seq)
+		if !e.idIsActive(candidate) {
+			return candidate
+		}
+	}
 }
 
 // behaviors returns the live behaviors oldest-first, which is the order both
