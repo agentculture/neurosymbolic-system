@@ -239,7 +239,10 @@ func (s *session) writeLoop() {
 }
 
 func (s *session) readLoop() {
-	defer s.srv.detach(s)
+	// readerEnded, not detach: on a socket the peer hung up and the session
+	// goes with it, but on stdio the WRITE half is still usable and the
+	// endpoint has one more thing to say — see Server.readerEnded.
+	defer s.srv.readerEnded(s)
 	for {
 		body, err := readFrame(s.r)
 		if err != nil {

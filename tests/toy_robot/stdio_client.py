@@ -73,6 +73,24 @@ class StdioToyRobot:
         assert self.proc is not None
         self.proc.send_signal(sig)
 
+    def close_stdin(self) -> None:
+        """Hang up the way a parent that is going away does.
+
+        Closing the pipe is the only notice such a parent gets to give: one
+        that has already exited cannot send a signal, so an engine needing one
+        to stop would be an orphan nobody is left to clean up.
+        """
+        assert self.proc is not None and self.proc.stdin is not None
+        self.proc.stdin.close()
+
+    def wait(self, timeout: float) -> int | None:
+        """The child's exit code, or None if it is still running."""
+        assert self.proc is not None
+        try:
+            return self.proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return None
+
     def stop(self) -> None:
         """Reap the child and collect its stderr, whatever state it is in.
 
@@ -91,7 +109,7 @@ class StdioToyRobot:
             proc.kill()
             proc.wait(timeout=5)
         for stream in (proc.stdin, proc.stdout):
-            if stream is not None:
+            if stream is not None and not stream.closed:
                 stream.close()
         if proc.stderr is not None:
             self.stderr = proc.stderr.read() or b""
