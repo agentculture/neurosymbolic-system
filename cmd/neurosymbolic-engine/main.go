@@ -46,6 +46,7 @@ Commands:
   whoami                  print the engine's version, revision and module path
   doctor                  run environment checks (toolchain, vendoring, ...)
   status                  report the live engine's state (needs a stream)
+  bench [flags]           benchmark tick p50/p99/overruns/RSS under a synthetic load
   rules check <file>...   validate rules files with no robot attached
   rules list <file>...    list every rule's id, kind and predicate
   rules migrate <file>    write a schema_version-2 twin of a rules file

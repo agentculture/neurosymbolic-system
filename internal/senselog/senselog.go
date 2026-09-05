@@ -36,13 +36,21 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 )
 
 const lineFormat = "[SENSE stage=%s source=%s event=%s] %s\n"
 
 // Logger writes SENSE-grammar lines to an io.Writer.
+//
+// A Logger is safe for concurrent use: mu serializes every write so two
+// goroutines logging at once (t10 worked around the lack of this with a
+// provider-local mutex) can never interleave one line's bytes with another's,
+// which would otherwise corrupt the fixed "[SENSE ...] " grammar a consumer
+// parses line by line.
 type Logger struct {
-	w io.Writer
+	mu sync.Mutex
+	w  io.Writer
 }
 
 // New returns a Logger that writes to w.
@@ -82,5 +90,7 @@ func (l *Logger) Drop(stage, source, event, reason, detail string) {
 }
 
 func (l *Logger) write(stage, source, event, detail string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	fmt.Fprintf(l.w, lineFormat, sanitize(stage), sanitize(source), sanitize(event), detail)
 }
