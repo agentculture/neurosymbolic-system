@@ -17,8 +17,15 @@
 #   microduck-cli/microduck_cli/behavior/intents.py KIND constants
 #
 # Lines are `name` with `#` comments and blank lines ignored. Matching is
-# whole-token: a name matches inside a literal only when it is not adjacent to
-# an alphanumeric character, so `do` does not collide with `does`.
+# WHOLE-LITERAL equality: a name is a leak only when a string literal's entire
+# unquoted value is that name, so a donor word appearing inside an identifier
+# ("active_mode") or inside an error message ("...the words to speak...") is not
+# a hit. The guard looks for a robot name compiled in as an identifier, not for
+# an English word.
+#
+# The few schema keys that ARE spelled exactly like a donor name live in
+# schema_keywords.txt and are subtracted from this list. Keep this file a
+# faithful transcription of the donors; record exemptions over there.
 
 # --- channels (reachy: head/antennas/body_yaw; microduck: the other five) ---
 head
