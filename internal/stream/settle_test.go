@@ -271,3 +271,94 @@ func kindsOf(frames []map[string]any) []any {
 	}
 	return out
 }
+
+// enteredWriter signals when a Write has BEGUN and then blocks inside it.
+//
+// It exists to reproduce the one window "is the queue empty?" cannot see: the
+// writer goroutine has received a frame from the channel — so the channel is
+// empty — but has not finished writing it.
+type enteredWriter struct {
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func newEnteredWriter() *enteredWriter {
+	return &enteredWriter{entered: make(chan struct{}, 8), release: make(chan struct{})}
+}
+
+func (e *enteredWriter) Write(p []byte) (int, error) {
+	e.entered <- struct{}{}
+	<-e.release
+	return len(p), nil
+}
+
+func (e *enteredWriter) open() { e.once.Do(func() { close(e.release) }) }
+
+// TestFlushWaitsForTheWriteNotJustTheDequeue pins the flush's actual condition.
+//
+// An earlier version of flushWithin waited for the outbound CHANNEL to empty.
+// That is a different question, and the difference is a real race the toy
+// robot's stdio end-to-end test caught one run in three: the writer receives a
+// frame (channel now empty) and only then locks wmu, so a flush that stopped
+// there would let the end frame win that lock and overtake the very settle pose
+// it was supposed to be waiting for.
+//
+// The condition is "every frame accepted onto the queue has been WRITTEN", and
+// this test holds the writer inside its Write to prove the flush is waiting on
+// that and not on the channel.
+func TestFlushWaitsForTheWriteNotJustTheDequeue(t *testing.T) {
+	voc := toyVoc(t)
+	writer := newEnteredWriter()
+	reader := blockedReader{done: make(chan struct{})}
+	defer close(reader.done)
+
+	srv, err := NewStdio(Config{
+		Vocabulary: voc, Clock: tick.RealClock{}, HeartbeatEvery: -1,
+		OutboundQueue: DefaultOutboundQueue,
+	}, nil, newRecordingSense(), nil, senselog.New(&syncBuffer{}), reader, writer)
+	if err != nil {
+		t.Fatalf("NewStdio: %v", err)
+	}
+	go srv.Serve(context.Background())
+
+	if err := srv.Write(voc.Neutral()); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	// Wait until the writer is INSIDE the Write. The channel is empty now, so
+	// a flush keyed on emptiness would return immediately.
+	select {
+	case <-writer.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the writer never began its write")
+	}
+	sess := srv.session()
+	if sess == nil {
+		t.Fatal("the stdio session is gone")
+	}
+	if len(sess.out) != 0 {
+		t.Fatalf("the outbound channel holds %d frames, want 0 for this test to mean anything",
+			len(sess.out))
+	}
+
+	flushed := make(chan struct{})
+	go func() {
+		defer close(flushed)
+		sess.flushWithin(2 * time.Second)
+	}()
+
+	select {
+	case <-flushed:
+		t.Fatal("the flush returned while a frame was still being written")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	writer.open()
+	select {
+	case <-flushed:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the flush did not return after the write completed")
+	}
+	srv.Close()
+}

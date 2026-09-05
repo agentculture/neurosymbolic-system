@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/agentculture/neurosymbolic-system/internal/tick"
@@ -30,6 +31,18 @@ type session struct {
 	wmu        sync.Mutex
 	once       sync.Once
 	writerDone chan struct{}
+
+	// queued counts frames ACCEPTED onto the outbound queue; written counts
+	// frames the writer goroutine has finished writing. The shutdown flush
+	// waits for the two to meet.
+	//
+	// "the channel is empty" is NOT the same question, and the difference is a
+	// real race: the writer receives a frame (emptying the channel) and only
+	// then locks wmu, so a flush that stopped at an empty channel could let the
+	// end frame win that lock and overtake the very pose it was waiting for.
+	// A counter the writer bumps AFTER its Write has no such window.
+	queued  atomic.Uint64
+	written atomic.Uint64
 
 	// greeted is touched only by the reader goroutine.
 	greeted bool
@@ -100,10 +113,15 @@ func (s *session) sendWithin(payload any, grace time.Duration) {
 // a wedged consumer still cannot wedge the engine's own shutdown, which is the
 // property the grace exists to protect.
 //
-// It returns once the queue is EMPTY, which means the writer has taken the last
-// frame off the channel; it may still be inside that Write. That is enough,
-// because send takes the same wmu, so an end frame issued after this returns
-// cannot overtake a write already in progress.
+// It returns once every frame ACCEPTED onto the queue has been WRITTEN — not
+// merely once the channel is empty. The distinction is the whole correctness of
+// this function: the writer goroutine receives a frame from the channel and
+// only afterwards locks wmu, so between those two moments the queue is empty
+// while the frame is still unwritten, and an end frame racing for wmu would
+// win. Waiting on the written counter closes that window.
+//
+// A writer that dies mid-drain ends the wait too (writerDone), because there is
+// then nothing left that could ever advance the counter.
 func (s *session) flushWithin(grace time.Duration) {
 	if grace <= 0 {
 		return
@@ -113,7 +131,7 @@ func (s *session) flushWithin(grace time.Duration) {
 	poll := time.NewTicker(flushPollEvery)
 	defer poll.Stop()
 	for {
-		if len(s.out) == 0 {
+		if s.written.Load() >= s.queued.Load() {
 			return
 		}
 		select {
@@ -190,6 +208,7 @@ func (s *session) enqueue(kind string, payload any) {
 	}
 	select {
 	case s.out <- body:
+		s.queued.Add(1)
 	default:
 		s.srv.drop(kind, "backpressure", fmt.Sprintf(
 			"the consumer is not reading; the outbound queue is full at %d frames",
@@ -211,6 +230,7 @@ func (s *session) writeLoop() {
 				s.srv.detach(s)
 				return
 			}
+			s.written.Add(1)
 			s.srv.framesOut.Add(1)
 		case <-s.quit:
 			return
