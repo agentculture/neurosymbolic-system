@@ -35,9 +35,10 @@ import (
 // identifier", not "no English word", so identifier-shaped matching is the
 // honest test and prose is out of scope by construction.
 //
-// The residual collisions — a schema key spelled exactly like a donor name —
-// are listed in testdata/schema_keywords.txt with their justification, so an
-// exemption is a visible, reviewed edit rather than a quietly loosened matcher.
+// The residual collisions — a schema key or a wire frame-kind token spelled
+// exactly like a donor name — are listed in testdata/schema_keywords.txt and
+// testdata/protocol_tokens.txt with their justification, so an exemption is a
+// visible, reviewed edit rather than a quietly loosened matcher.
 func TestNoDonorLiteralsInEngineSources(t *testing.T) {
 	root := repoRoot(t)
 	names := donorNames(t)
@@ -74,17 +75,31 @@ func TestNoDonorLiteralsInEngineSources(t *testing.T) {
 	}
 }
 
-// donorNames is the donor name list minus the exempted schema keywords. It is
-// built by subtraction rather than by editing the donor list, so the donor list
-// stays a faithful transcription of what the two robots actually call things.
+// exemptionFiles are the two subtraction lists, each with its own bar for
+// entry: schema_keywords.txt for rules-FILE schema keys, protocol_tokens.txt
+// for stream WIRE frame-kind tokens. They are separate files because the two
+// arguments are different — one is "the loader must be able to name its own
+// schema", the other is "a wire token the engine could not write down would be
+// a protocol nobody could implement" — and a reviewer should see which claim an
+// exemption is making without having to guess.
+func exemptionFiles() []string {
+	return []string{"schema_keywords.txt", "protocol_tokens.txt"}
+}
+
+// donorNames is the donor name list minus the exempted schema keywords and
+// wire protocol tokens. It is built by subtraction rather than by editing the
+// donor list, so the donor list stays a faithful transcription of what the two
+// robots actually call things.
 func donorNames(t *testing.T) map[string]bool {
 	t.Helper()
 	names := map[string]bool{}
 	for _, name := range loadNameFile(t, filepath.Join("testdata", "donor_names.txt")) {
 		names[name] = true
 	}
-	for _, exempt := range loadNameFile(t, filepath.Join("testdata", "schema_keywords.txt")) {
-		delete(names, exempt)
+	for _, file := range exemptionFiles() {
+		for _, exempt := range loadNameFile(t, filepath.Join("testdata", file)) {
+			delete(names, exempt)
+		}
 	}
 	return names
 }
@@ -117,7 +132,9 @@ func checkFileLiterals(t *testing.T, root, path string, names map[string]bool) {
 				"%s:%d: donor name %q appears as a string literal; the engine must "+
 					"learn it from an adaptor config instead (if this is a rules-file "+
 					"schema key rather than a robot name, justify it in "+
-					"internal/adaptor/testdata/schema_keywords.txt)",
+					"internal/adaptor/testdata/schema_keywords.txt; if it is a stream "+
+					"wire frame-kind token, in "+
+					"internal/adaptor/testdata/protocol_tokens.txt)",
 				rel, pos.Line, value,
 			)
 		}
@@ -210,5 +227,48 @@ func TestSchemaKeywordsAreExempted(t *testing.T) {
 		if names[name] {
 			t.Errorf("%q is exempted but still enforced", name)
 		}
+	}
+}
+
+// TestProtocolTokensAreExempted pins the second exemption list the same way,
+// and pins its NARROWER bar: it carries wire frame-kind tokens only, and the
+// header says in as many words that a channel or action name may not be
+// exempted here. A future edit that widened this file into a general escape
+// hatch would take the guard's teeth out silently, so both the entry and the
+// prohibition are asserted rather than trusted.
+func TestProtocolTokensAreExempted(t *testing.T) {
+	path := filepath.Join("testdata", "protocol_tokens.txt")
+	exempt := loadNameFile(t, path)
+	if len(exempt) == 0 {
+		t.Fatal("protocol_tokens.txt yielded no tokens")
+	}
+
+	// Only tokens internal/stream actually declares as a frame `kind` belong
+	// here. The list is spelled out rather than imported so this package keeps
+	// its place at the bottom of the dependency graph.
+	wireKinds := map[string]bool{
+		"pose": true, "hello": true, "sense": true, "intent": true,
+		"mgmt": true, "mgmt_result": true, "event": true, "heartbeat": true,
+		"end": true, "error": true,
+	}
+	names := donorNames(t)
+	for _, token := range exempt {
+		if !wireKinds[token] {
+			t.Errorf("%q is exempted as a wire frame kind but internal/stream declares no "+
+				"such kind; only frame-kind tokens belong in protocol_tokens.txt", token)
+		}
+		if names[token] {
+			t.Errorf("%q is exempted but still enforced", token)
+		}
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading %s: %v", path, err)
+	}
+	const prohibition = "A CHANNEL NAME OR AN ACTION NAME MAY NOT BE EXEMPTED HERE ON ANY GROUNDS."
+	if !strings.Contains(string(raw), prohibition) {
+		t.Errorf("protocol_tokens.txt no longer states %q; the file's bar is the only thing "+
+			"keeping it from becoming a general escape hatch", prohibition)
 	}
 }
