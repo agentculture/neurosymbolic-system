@@ -145,3 +145,30 @@ func TestStdioRefusesAVersionMismatch(t *testing.T) {
 		t.Errorf("the refusal %q does not name both versions", message)
 	}
 }
+
+// The hello reply must be the first frame a peer ever receives. Telemetry is
+// enqueued from the tick goroutine from the moment a session exists, so a tick
+// that lands between accept and the hello reply used to put a pose on the wire
+// first — seen on the arm64 CI leg under QEMU, where the window is wide. A
+// session that has not completed hello is not a subscriber yet: frames before
+// that are skipped, not dropped.
+func TestTheHelloReplyPrecedesAnyTelemetry(t *testing.T) {
+	r := newPipeRig(t, nil, nil)
+	neutral := r.srv.cfg.Vocabulary.Neutral()
+	for i := 0; i < 3; i++ {
+		if err := r.srv.Write(neutral); err != nil {
+			t.Fatalf("Write before hello: %v", err)
+		}
+	}
+	// handshake sends hello and reads the reply; a pose arriving first fails it.
+	r.client.handshake()
+	if err := r.srv.Write(neutral); err != nil {
+		t.Fatalf("Write after hello: %v", err)
+	}
+	if got := r.client.recvKind(KindPose); got == nil {
+		t.Fatal("no pose frame after the handshake")
+	}
+	if drops := r.srv.Stats().Drops; drops != 0 {
+		t.Errorf("pre-hello frames were counted as drops (%d); they are skipped, not owed", drops)
+	}
+}

@@ -46,6 +46,16 @@ type session struct {
 
 	// greeted is touched only by the reader goroutine.
 	greeted bool
+
+	// subscribed flips to true only after the hello REPLY has been written.
+	// Telemetry (pose, event, heartbeat) is enqueued from the tick goroutine
+	// from the moment a session exists, so without this gate a tick that lands
+	// between accept and the hello reply puts a pose on the wire ahead of the
+	// hello — a real ordering race, first seen on the arm64 CI leg under QEMU
+	// where the window is wide. A session that has not completed hello is not
+	// yet a subscriber; frames from before that moment are not owed to it and
+	// are skipped silently (this is not a drop of anything the peer asked for).
+	subscribed atomic.Bool
 }
 
 func newSession(srv *Server, r io.Reader, w io.Writer, closer io.Closer) *session {
@@ -196,6 +206,9 @@ func (s *session) send(payload any) error {
 // consumer that catches up receives a contiguous older window rather than a
 // shuffled one.
 func (s *session) enqueue(kind string, payload any) {
+	if !s.subscribed.Load() {
+		return // not greeted yet: the hello reply must be the first frame
+	}
 	select {
 	case <-s.quit:
 		return
@@ -325,9 +338,14 @@ func (s *session) handleHello(body []byte) bool {
 	_ = json.Unmarshal(body, &in) // the client name is informational
 	s.greeted = true
 	s.srv.note("hello", KindHello, "a client attached: "+sanitizeClient(in.Client))
-	return s.send(helloOut{
+	if err := s.send(helloOut{
 		V: Version, Kind: KindHello, EngineVersion: s.srv.cfg.EngineVersion,
-	}) == nil
+	}); err != nil {
+		return false
+	}
+	// Only now may telemetry reach this peer: the hello reply is on the wire.
+	s.subscribed.Store(true)
+	return true
 }
 
 func sanitizeClient(name string) string {

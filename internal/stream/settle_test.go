@@ -112,6 +112,9 @@ func TestTheSettlingNeutralPoseReachesThePeerBeforeTheEndFrame(t *testing.T) {
 		t.Fatalf("NewStdio: %v", err)
 	}
 
+	// These mechanics tests never send a hello; the wire rule is hello-first, so
+	// mark the session subscribed the way a completed handshake would.
+	srv.session().subscribed.Store(true)
 	// Settle is left at its default (nil), which is the whole point: the engine
 	// writes one neutral pose as the loop exits.
 	eng, err := tick.New(voc, tick.Config{
@@ -320,6 +323,9 @@ func TestFlushWaitsForTheWriteNotJustTheDequeue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStdio: %v", err)
 	}
+	// These mechanics tests never send a hello; the wire rule is hello-first, so
+	// mark the session subscribed the way a completed handshake would.
+	srv.session().subscribed.Store(true)
 	go srv.Serve(context.Background())
 
 	if err := srv.Write(voc.Neutral()); err != nil {

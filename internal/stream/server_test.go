@@ -86,6 +86,9 @@ func TestSlowReaderDropsPoseFramesAndNeverBlocksTheTick(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStdio: %v", err)
 	}
+	// These mechanics tests never send a hello; the wire rule is hello-first, so
+	// mark the session subscribed the way a completed handshake would.
+	srv.session().subscribed.Store(true)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go srv.Serve(ctx)
