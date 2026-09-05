@@ -1,0 +1,381 @@
+[[actions]]
+  claims = ["head", "antennas", "body_yaw"]
+  loops = true
+  name = "feel-alive"
+
+  [[actions.params]]
+    max = 4.0
+    min = 0.0
+    name = "energy"
+
+  [[actions.params]]
+    max = 45.0
+    min = 0.0
+    name = "antenna"
+  [actions.trajectories]
+    [actions.trajectories.antennas]
+      [actions.trajectories.antennas.easing]
+        duration_s = 4.0
+        from = [0.0, 0.0]
+        kind = "ease_in_out"
+        to = [12.0, -12.0]
+    [actions.trajectories.body_yaw]
+      [actions.trajectories.body_yaw.easing]
+        duration_s = 4.0
+        from = [0.0]
+        kind = "linear"
+        to = [2.0]
+    [actions.trajectories.head]
+
+      [[actions.trajectories.head.keyframes]]
+        t = 0.0
+        value = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+      [[actions.trajectories.head.keyframes]]
+        t = 2.0
+        value = [0.0, 0.0, 3.0, 0.0, 2.0, 0.0]
+
+      [[actions.trajectories.head.keyframes]]
+        t = 4.0
+        value = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+[[actions]]
+  claims = ["head", "antennas"]
+  loops = false
+  name = "pet-reaction"
+  [actions.trajectories]
+    [actions.trajectories.antennas]
+      [actions.trajectories.antennas.easing]
+        duration_s = 1.2
+        from = [0.0, 0.0]
+        kind = "ease_in_out"
+        to = [20.0, 20.0]
+    [actions.trajectories.head]
+      [actions.trajectories.head.easing]
+        duration_s = 1.2
+        from = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        kind = "ease_in_out"
+        to = [0.0, 0.0, -5.0, 0.0, 8.0, 0.0]
+
+[[actions]]
+  claims = ["head"]
+  loops = true
+  name = "face-lock"
+
+  [[actions.params]]
+    max = 1.0
+    min = 0.0
+    name = "slew"
+  [actions.trajectories]
+    [actions.trajectories.head]
+      [actions.trajectories.head.easing]
+        duration_s = 0.8
+        from = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        kind = "linear"
+        to = [0.0, 0.0, 0.0, 0.0, 0.0, 15.0]
+
+[[actions]]
+  claims = ["head", "body_yaw"]
+  loops = false
+  name = "orient-to-sound"
+
+  [[actions.params]]
+    max = 2.0
+    min = 0.0
+    name = "gain"
+
+  [[actions.params]]
+    max = 90.0
+    min = 0.0
+    name = "deadband"
+
+  [[actions.params]]
+    max = 10.0
+    min = 0.0
+    name = "hold"
+  [actions.trajectories]
+    [actions.trajectories.body_yaw]
+      [actions.trajectories.body_yaw.easing]
+        duration_s = 4.0
+        from = [0.0]
+        kind = "ease_in_out"
+        to = [20.0]
+    [actions.trajectories.head]
+      [actions.trajectories.head.easing]
+        duration_s = 4.0
+        from = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        kind = "ease_in_out"
+        to = [0.0, 0.0, 0.0, 0.0, 0.0, 25.0]
+
+[[actions]]
+  claims = ["head"]
+  loops = false
+  name = "gaze-hold"
+
+  [[actions.params]]
+    max = 60.0
+    min = -60.0
+    name = "yaw"
+
+  [[actions.params]]
+    max = 30.0
+    min = -30.0
+    name = "pitch"
+  [actions.trajectories]
+    [actions.trajectories.head]
+      [actions.trajectories.head.easing]
+        duration_s = 0.6
+        from = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        kind = "ease_in_out"
+        to = [0.0, 0.0, 0.0, 0.0, 10.0, 18.0]
+
+[[actions]]
+  claims = ["head"]
+  loops = false
+  name = "look-at-sound"
+  [actions.trajectories]
+    [actions.trajectories.head]
+      [actions.trajectories.head.easing]
+        duration_s = 0.7
+        from = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        kind = "ease_in_out"
+        to = [0.0, 0.0, 0.0, 0.0, 0.0, 20.0]
+
+[[actions]]
+  claims = ["head"]
+  loops = false
+  name = "look-at-face"
+  [actions.trajectories]
+    [actions.trajectories.head]
+      [actions.trajectories.head.easing]
+        duration_s = 0.7
+        from = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        kind = "ease_in_out"
+        to = [0.0, 0.0, 0.0, 0.0, 5.0, 10.0]
+
+[[actions]]
+  claims = ["head"]
+  loops = false
+  name = "nod"
+
+  [[actions.params]]
+    max = 45.0
+    min = 0.0
+    name = "amp"
+
+  [[actions.params]]
+    max = 5.0
+    min = 0.1
+    name = "period"
+  [actions.trajectories]
+    [actions.trajectories.head]
+
+      [[actions.trajectories.head.keyframes]]
+        t = 0.0
+        value = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+      [[actions.trajectories.head.keyframes]]
+        t = 0.4
+        value = [0.0, 0.0, 0.0, 0.0, -12.0, 0.0]
+
+      [[actions.trajectories.head.keyframes]]
+        t = 0.8
+        value = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+[[actions]]
+  claims = ["head"]
+  loops = false
+  name = "shake"
+
+  [[actions.params]]
+    max = 45.0
+    min = 0.0
+    name = "amp"
+
+  [[actions.params]]
+    max = 5.0
+    min = 0.1
+    name = "period"
+  [actions.trajectories]
+    [actions.trajectories.head]
+
+      [[actions.trajectories.head.keyframes]]
+        t = 0.0
+        value = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+      [[actions.trajectories.head.keyframes]]
+        t = 0.35
+        value = [0.0, 0.0, 0.0, 0.0, 0.0, -15.0]
+
+      [[actions.trajectories.head.keyframes]]
+        t = 0.7
+        value = [0.0, 0.0, 0.0, 0.0, 0.0, 15.0]
+
+[[actions]]
+  claims = ["head"]
+  loops = true
+  name = "speak"
+
+  [[actions.params]]
+    max = 30.0
+    min = 0.0
+    name = "pitch"
+
+  [[actions.params]]
+    max = 30.0
+    min = 0.0
+    name = "yaw"
+
+  [[actions.params]]
+    max = 5.0
+    min = 0.05
+    name = "period"
+  [actions.trajectories]
+    [actions.trajectories.head]
+
+      [[actions.trajectories.head.keyframes]]
+        t = 0.0
+        value = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+      [[actions.trajectories.head.keyframes]]
+        t = 0.16
+        value = [0.0, 0.0, 0.0, 0.0, 5.0, 3.0]
+
+      [[actions.trajectories.head.keyframes]]
+        t = 0.32
+        value = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+[[actions]]
+  claims = ["head", "antennas"]
+  loops = false
+  name = "thoughtful"
+
+  [[actions.params]]
+    max = 5.0
+    min = 0.05
+    name = "rise"
+  [actions.trajectories]
+    [actions.trajectories.antennas]
+      [actions.trajectories.antennas.easing]
+        duration_s = 0.6
+        from = [0.0, 0.0]
+        kind = "ease_in_out"
+        to = [-8.0, 8.0]
+    [actions.trajectories.head]
+      [actions.trajectories.head.easing]
+        duration_s = 0.6
+        from = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        kind = "ease_in_out"
+        to = [0.0, 0.0, 0.0, 5.0, 8.0, 10.0]
+
+[[actions]]
+  claims = ["antennas"]
+  loops = true
+  name = "antenna-sway"
+
+  [[actions.params]]
+    max = 45.0
+    min = 0.0
+    name = "amp"
+
+  [[actions.params]]
+    max = 10.0
+    min = 0.1
+    name = "period"
+  [actions.trajectories]
+    [actions.trajectories.antennas]
+
+      [[actions.trajectories.antennas.keyframes]]
+        t = 0.0
+        value = [0.0, 0.0]
+
+      [[actions.trajectories.antennas.keyframes]]
+        t = 1.5
+        value = [18.0, -18.0]
+
+      [[actions.trajectories.antennas.keyframes]]
+        t = 3.0
+        value = [0.0, 0.0]
+
+[[actions]]
+  claims = ["body_yaw"]
+  loops = false
+  name = "body-turn-hold"
+
+  [[actions.params]]
+    max = 90.0
+    min = -90.0
+    name = "yaw"
+
+  [[actions.params]]
+    max = 5.0
+    min = 0.05
+    name = "rise"
+  [actions.trajectories]
+    [actions.trajectories.body_yaw]
+      [actions.trajectories.body_yaw.easing]
+        duration_s = 0.5
+        from = [0.0]
+        kind = "ease_in_out"
+        to = [20.0]
+
+[[channels]]
+  arity = 6
+  name = "head"
+  neutral = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+[[channels]]
+  arity = 2
+  name = "antennas"
+  neutral = [0.0, 0.0]
+
+[[channels]]
+  arity = 1
+  name = "body_yaw"
+  neutral = [0.0]
+
+[[senses]]
+  age_field = "doa_age_s"
+  name = "doa"
+  type = "float"
+
+[[senses]]
+  name = "doa_age_s"
+  type = "float"
+
+[[senses]]
+  name = "speech"
+  type = "bool"
+
+[[senses]]
+  name = "rms"
+  type = "float"
+
+[[senses]]
+  name = "rms_ratio"
+  type = "float"
+
+[[senses]]
+  name = "pat"
+  type = "bool"
+
+[[senses]]
+  age_field = "face_age_s"
+  name = "face"
+  type = "string"
+
+[[senses]]
+  name = "face_age_s"
+  type = "float"
+
+[[senses]]
+  name = "frame_available"
+  type = "bool"
+
+[[senses]]
+  name = "transcript"
+  type = "string"
+
+[[senses]]
+  name = "self_moving"
+  type = "bool"

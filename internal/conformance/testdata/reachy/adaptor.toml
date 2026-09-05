@@ -1,0 +1,298 @@
+# Reachy Mini as an ADAPTOR CONFIG — the donor's plant, described as data.
+#
+# Shared by every case under `testdata/reachy/`; a case directory may carry its
+# own `adaptor.toml` to override it, and none currently does.
+#
+# What is DERIVED from the donor (and must not drift):
+#
+#   * the three channels, from `reachy/behavior/model.py`'s
+#     `CHANNELS = ("head", "antennas", "body_yaw")`;
+#   * the sense field NAMES, from `reachy/behavior/sense.py`'s `Sense`
+#     dataclass, plus the bare `pat` and `rms_ratio` names the shipped
+#     `default_rules.toml` actually keys on;
+#   * the action NAMES and their claimed channels, from
+#     `reachy/behavior/library.py`'s `LIBRARY` entries, and each entry's
+#     `looping` flag.
+#
+# What is a FIXTURE CHOICE, stated here so nobody mistakes it for donor fact:
+#
+#   * every ARITY. The donor's head is a 4x4 pose matrix and its antennas are a
+#     pair of angles; nothing in this runtime interprets a channel's width, so
+#     the widths below (6 / 2 / 1) are picked to be legible and all different.
+#   * every NEUTRAL and every TRAJECTORY shape. Pose VALUES are deliberately
+#     not compared by the conformance harness — only pose COMPLETENESS is.
+#   * every trajectory DURATION, which is what bounds a one-shot the rules file
+#     gives no `duration_s`. `pet-reaction`'s 1.0 s stands in for the donor's
+#     `_PET_REACTION_BACKSTOP_S` backstop; it is shorter so a bounded replay can
+#     watch the behavior expire.
+#   * every PARAM DOMAIN. The donor's defaults live in `library.py`; the
+#     conformance rules files set no params, so only the names matter here.
+
+# --- channels ---------------------------------------------------------------
+
+[[channels]]
+  name = "head"
+  arity = 6
+  neutral = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+[[channels]]
+  name = "antennas"
+  arity = 2
+  neutral = [0.0, 0.0]
+
+[[channels]]
+  name = "body_yaw"
+  arity = 1
+  neutral = [0.0]
+
+# --- senses -----------------------------------------------------------------
+# `pat` and `rms_ratio` are the fields the SHIPPED rules key on. The rest are
+# declared because a rules file may key on them and because a field the
+# vocabulary does not declare can never be fed.
+
+[[senses]]
+  name = "pat"
+  type = "bool"
+
+[[senses]]
+  name = "rms"
+  type = "float"
+
+[[senses]]
+  name = "rms_ratio"
+  type = "float"
+
+[[senses]]
+  name = "doa_angle"
+  type = "float"
+
+[[senses]]
+  name = "speech_detected"
+  type = "bool"
+
+[[senses]]
+  name = "transcript"
+  type = "string"
+
+[[senses]]
+  name = "face"
+  type = "string"
+
+[[senses]]
+  name = "frame_available"
+  type = "bool"
+
+[[senses]]
+  name = "self_moving"
+  type = "bool"
+
+# --- actions ----------------------------------------------------------------
+
+# feel-alive — the PASSIVE base layer, looping and unbounded, claiming all
+# three channels. It owns whatever nothing else claims, which is what makes an
+# abstention observable as a handover rather than as a frozen channel.
+[[actions]]
+  name = "feel-alive"
+  claims = ["head", "antennas", "body_yaw"]
+  loops = true
+
+  [[actions.params]]
+    name = "energy"
+    min = 0.0
+    max = 3.0
+
+  [actions.trajectories]
+    [actions.trajectories.head]
+      [[actions.trajectories.head.keyframes]]
+        t = 0.0
+        value = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+      [[actions.trajectories.head.keyframes]]
+        t = 2.5
+        value = [0.0, 0.0, 3.0, 0.0, 2.0, 0.0]
+      [[actions.trajectories.head.keyframes]]
+        t = 5.0
+        value = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+    [actions.trajectories.antennas]
+      [[actions.trajectories.antennas.keyframes]]
+        t = 0.0
+        value = [0.0, 0.0]
+      [[actions.trajectories.antennas.keyframes]]
+        t = 3.0
+        value = [12.0, -12.0]
+      [[actions.trajectories.antennas.keyframes]]
+        t = 5.0
+        value = [0.0, 0.0]
+
+    [actions.trajectories.body_yaw]
+      [[actions.trajectories.body_yaw.keyframes]]
+        t = 0.0
+        value = [0.0]
+      [[actions.trajectories.body_yaw.keyframes]]
+        t = 5.0
+        value = [0.0]
+
+# pet-reaction — the one-shot `pat-acknowledge` runs. Donor: looping=False with
+# a finite backstop, so the rules file needs no `duration_s` of its own and the
+# action's own longest trajectory bounds it.
+[[actions]]
+  name = "pet-reaction"
+  claims = ["head", "antennas", "body_yaw"]
+  loops = false
+
+  [actions.trajectories]
+    [actions.trajectories.head]
+      [actions.trajectories.head.easing]
+        kind = "ease_in_out"
+        from = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        to = [0.0, 0.0, -4.0, 0.0, 8.0, 0.0]
+        duration_s = 1.0
+
+    [actions.trajectories.antennas]
+      [actions.trajectories.antennas.easing]
+        kind = "ease_in_out"
+        from = [0.0, 0.0]
+        to = [25.0, -25.0]
+        duration_s = 1.0
+
+    [actions.trajectories.body_yaw]
+      [actions.trajectories.body_yaw.easing]
+        kind = "hold"
+        from = [0.0]
+        to = [0.0]
+        duration_s = 1.0
+
+# orient-to-sound — donor: looping with NO default duration, so a react rule
+# MUST bound it explicitly. The donor's own entry is `wants_sense=True`-shaped:
+# with no credible sound it ABSTAINS rather than freezing the head.
+[[actions]]
+  name = "orient-to-sound"
+  claims = ["head", "antennas", "body_yaw"]
+  loops = true
+
+  [[actions.params]]
+    name = "gain"
+    min = 0.0
+    max = 4.0
+
+  [[actions.params]]
+    name = "max_yaw"
+    min = 0.0
+    max = 90.0
+
+  [[actions.params]]
+    name = "deadband"
+    min = 0.0
+    max = 45.0
+
+  [[actions.params]]
+    name = "hold"
+    min = 0.0
+    max = 10.0
+
+  [[actions.params]]
+    name = "alert_speed"
+    min = 0.0
+    max = 360.0
+
+  [actions.trajectories]
+    [actions.trajectories.head]
+      [actions.trajectories.head.easing]
+        kind = "linear"
+        from = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        to = [0.0, 0.0, 0.0, 0.0, 0.0, 30.0]
+        duration_s = 1.0
+
+    [actions.trajectories.antennas]
+      [actions.trajectories.antennas.easing]
+        kind = "linear"
+        from = [0.0, 0.0]
+        to = [18.0, 18.0]
+        duration_s = 1.0
+
+    [actions.trajectories.body_yaw]
+      [actions.trajectories.body_yaw.easing]
+        kind = "linear"
+        from = [0.0]
+        to = [15.0]
+        duration_s = 1.0
+
+# speak — head motion only. The VOICE is the rule's `say`, which this runtime
+# forwards on the fire event and never renders: the library owns no actuator.
+[[actions]]
+  name = "speak"
+  claims = ["head"]
+  loops = true
+
+  [[actions.params]]
+    name = "pitch"
+    min = 0.0
+    max = 30.0
+
+  [[actions.params]]
+    name = "yaw"
+    min = 0.0
+    max = 30.0
+
+  [[actions.params]]
+    name = "period"
+    min = 0.05
+    max = 5.0
+
+  [actions.trajectories]
+    [actions.trajectories.head]
+      [[actions.trajectories.head.keyframes]]
+        t = 0.0
+        value = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+      [[actions.trajectories.head.keyframes]]
+        t = 0.16
+        value = [0.0, 0.0, 0.0, 0.0, 5.0, 3.0]
+      [[actions.trajectories.head.keyframes]]
+        t = 0.32
+        value = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+# nod / shake — the two head one-liners the donor's rule-engine tests reach for
+# when they need a target whose identity does not matter.
+[[actions]]
+  name = "nod"
+  claims = ["head"]
+  loops = true
+
+  [[actions.params]]
+    name = "amp"
+    min = 0.0
+    max = 45.0
+
+  [actions.trajectories]
+    [actions.trajectories.head]
+      [[actions.trajectories.head.keyframes]]
+        t = 0.0
+        value = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+      [[actions.trajectories.head.keyframes]]
+        t = 0.4
+        value = [0.0, 0.0, 0.0, 0.0, 12.0, 0.0]
+      [[actions.trajectories.head.keyframes]]
+        t = 0.8
+        value = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+[[actions]]
+  name = "shake"
+  claims = ["head"]
+  loops = true
+
+  [[actions.params]]
+    name = "amp"
+    min = 0.0
+    max = 45.0
+
+  [actions.trajectories]
+    [actions.trajectories.head]
+      [[actions.trajectories.head.keyframes]]
+        t = 0.0
+        value = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+      [[actions.trajectories.head.keyframes]]
+        t = 0.35
+        value = [0.0, 0.0, 0.0, 0.0, 0.0, 15.0]
+      [[actions.trajectories.head.keyframes]]
+        t = 0.7
+        value = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

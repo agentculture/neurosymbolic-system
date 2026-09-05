@@ -1,0 +1,5 @@
+// The donor's T,T,T,F,F,F,F,F,T over `rms_ratio`, with 8.0 standing for "loud
+// relative to the room" (>= the rule's 5.0) and 1.0 for "the room".
+{"tick": 1, "fields": {"rms_ratio": 8.0}}
+{"tick": 4, "fields": {"rms_ratio": 1.0}}
+{"tick": 9, "fields": {"rms_ratio": 8.0}}

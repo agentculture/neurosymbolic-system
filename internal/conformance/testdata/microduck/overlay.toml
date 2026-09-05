@@ -1,0 +1,20 @@
+# A box-local overlay adding ONE react rule the shipped defaults do not carry.
+#
+# The shipped microduck defaults are two inhibits and one react on `limp`, so
+# nothing in them ever admits a `move` — and an inhibit that evicts a running
+# action needs a running action. This overlay supplies one, the way an
+# operator's own overlay would: a second layer, merged per rule id, adding an
+# id the lower layer does not have.
+#
+# `duration_s` is required because `move` is declared looping in the fixture
+# vocabulary; `cooldown_s = 0.0` keeps the timing out of the way, so what the
+# case shows is the inhibit and nothing else.
+
+schema_version = 1
+
+[[react]]
+id = "drive-on-pad"
+when = { field = "pad_active", op = "is_true" }
+run = "move"
+duration_s = 5.0
+cooldown_s = 0.0

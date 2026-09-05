@@ -8,7 +8,18 @@ Mirrors the two invariants ``steward doctor`` verifies for a mesh agent:
   (``claude`` → ``CLAUDE.md``, ``colleague`` → ``AGENTS.colleague.md``,
   ``acp`` → ``AGENTS.md``, ``gemini`` → ``GEMINI.md``).
 
-Plus a **skills-present** check (the vendored ``.claude/skills/`` kit). Read-only.
+Plus a **skills-present** check (the vendored ``.claude/skills/`` kit), and two
+engine checks (t12): **engine_present** (is ``neurosymbolic-engine`` locatable
+at all) and **engine_protocol** (spec h35 — does its reported protocol version
+match this client's :data:`~neurosymbolic_system.engine_client.EXPECTED_PROTOCOL`).
+Read-only.
+
+Only ``severity: error`` checks affect the overall ``healthy`` verdict — the
+engine checks (and the pre-existing ``skills_present`` check) are
+``severity: warning`` deliberately, so a box with no engine built yet still
+reports the agent-identity invariants as healthy; ``engine``/``rules`` verbs
+still refuse with an environment error (exit 2) when the engine itself is
+missing (see :mod:`neurosymbolic_system.engine_client`).
 
 Reports the rubric-shaped contract
 ``{healthy, checks: [{id, passed, severity, message, remediation}]}`` so the
@@ -23,6 +34,7 @@ import argparse
 
 from neurosymbolic_system.cli._commands.whoami import find_culture_yaml, read_agent_fields
 from neurosymbolic_system.cli._output import emit_result
+from neurosymbolic_system.engine_client import check_protocol, find_engine
 
 # backend → required prompt file (the backend-consistency mapping).
 _PROMPT_FILE = {
@@ -31,6 +43,11 @@ _PROMPT_FILE = {
     "acp": "AGENTS.md",
     "gemini": "GEMINI.md",
 }
+
+_ENGINE_BUILD_REMEDIATION = (
+    "build it: CGO_ENABLED=0 go build -o ~/.local/bin/neurosymbolic-engine "
+    "./cmd/neurosymbolic-engine, or set NEUROSYMBOLIC_ENGINE"
+)
 
 
 def _diagnose() -> dict[str, object]:
@@ -94,7 +111,33 @@ def _diagnose() -> dict[str, object]:
         }
     )
 
-    healthy = all(c["passed"] for c in checks)
+    # 3. engine-present: is `neurosymbolic-engine` locatable at all (t12).
+    engine_path = find_engine()
+    checks.append(
+        {
+            "id": "engine_present",
+            "passed": engine_path is not None,
+            "severity": "warning",
+            "message": (
+                f"neurosymbolic-engine found at {engine_path}"
+                if engine_path is not None
+                else "neurosymbolic-engine not found on PATH or NEUROSYMBOLIC_ENGINE"
+            ),
+            "remediation": "" if engine_path is not None else _ENGINE_BUILD_REMEDIATION,
+        }
+    )
+
+    # 4. engine-protocol: spec h35 — the engine's reported protocol version,
+    # when it is present at all. Never fails on an absent `protocol` field
+    # (the Go side has not shipped it yet); a genuine mismatch is surfaced by
+    # name but still warning-severity, consistent with engine_present above.
+    if engine_path is not None:
+        checks.append(check_protocol(engine_path))
+
+    # Only error-severity checks gate the overall verdict: the engine checks
+    # (and skills_present) are advisory, so a box with no engine yet still
+    # reports the agent-identity invariants as healthy.
+    healthy = all(c["passed"] for c in checks if c["severity"] == "error")
     return {"healthy": healthy, "checks": checks}
 
 

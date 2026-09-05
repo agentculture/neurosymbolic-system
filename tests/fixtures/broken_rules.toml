@@ -1,0 +1,15 @@
+# Deliberately broken rules fixture for t12's `rules check` failure test.
+#
+# Missing `schema_version` is the loader's first refusal (see
+# internal/rules/testdata/reachy/default_rules.toml, which fails the same
+# way) — this file exists locally so the Python-side test owns its own
+# fixture rather than reaching into the Go module's testdata.
+
+[[react]]
+id = "broken"
+run = "nothing"
+
+[react.when]
+field = "does.not.matter"
+op = "eq"
+value = true

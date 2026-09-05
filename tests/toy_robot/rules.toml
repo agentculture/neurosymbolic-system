@@ -1,0 +1,98 @@
+# The toy robot's rules — the second and last file a fresh consumer writes.
+#
+# Together with `adaptor.toml` and the built binary this is the WHOLE of
+# `neurosymbolic-engine run`'s input: no Go, no Python, no engine code at all
+# (spec h16/h4). Every id below is a public interface, exactly as on a real
+# robot: `tests/test_e2e_toy_robot.py` asserts on these ids, and an operator
+# would override or tombstone one by id from a higher layer.
+#
+# schema_version 2 is required by `bump-retreat`: an `all` conjunction is a v2
+# predicate, and a v1 file using one is refused naming the version, so a file
+# can never silently mean something other than what it declares.
+
+schema_version = 2
+
+# `active_mode` selects which [modes.*] table below is in force. It lives up
+# here with schema_version because it is a TOP-LEVEL key: written after a
+# [modes.*] header it would be parsed as a member of that table, and the
+# loader refuses it there rather than guessing what was meant.
+active_mode = "gentle"
+
+# --------------------------------------------------------------------------
+# bump-retreat — back off when the bumper is pressed AND the room is dim
+# --------------------------------------------------------------------------
+#
+# The conjunction is the point. A bumper alone is not evidence of much on a
+# toy robot that gets picked up and put down; a bumper in a dim room is the
+# case where backing off is the obviously correct move. Two signals, one
+# decision, one rule — which is exactly the shape v1 could not express.
+#
+# `duration_s` caps the admission at the trajectory's own length, so the
+# retreat ends on its own rather than holding the wheels until something
+# evicts it. `cooldown_s` keeps a bumper that chatters against a wall from
+# resubmitting a retreat every tick; each admission still goes through the one
+# registry, so it is refused exactly like any other blocked admission would be.
+[[react]]
+id = "bump-retreat"
+when = { all = [
+  { field = "bumper", op = "is_true" },
+  { field = "light_level", op = "lt", value = 0.5 },
+] }
+run = "retreat"
+duration_s = 0.5
+cooldown_s = 0.2
+params = { speed = 1.0 }
+
+# --------------------------------------------------------------------------
+# lost-tag-wave — wave when the tag has been gone a while
+# --------------------------------------------------------------------------
+#
+# `absent_for` is the one predicate that is about the SHAPE of time rather
+# than a reading: it holds once `tag` has been continuously absent for 0.3 s,
+# measured from engine start rather than from minus infinity, so a robot that
+# has never seen a tag does not fire on its very first tick.
+#
+# A transport says "this reading is gone" by sending the field as null. That
+# is deliberately explicit — absence has to be stated, never inferred from a
+# frame's silence — and it is what the end-to-end test does to arm this rule.
+[[react]]
+id = "lost-tag-wave"
+when = { field = "tag", op = "absent_for", value = 0.3 }
+run = "wave"
+duration_s = 0.4
+cooldown_s = 0.2
+
+# --------------------------------------------------------------------------
+# dark-inhibit — do not wave in the dark
+# --------------------------------------------------------------------------
+#
+# An inhibit is CONTINUOUS: while `light_level` is under 0.05, `wave` is
+# refused admission from every source — this file's own rule fire, an agent's
+# tool call, a standing goal — and evicted if it is already running. That
+# single-path property is why there is one admission registry; a rule fire and
+# an injected intent that could be judged differently would drift, and the
+# drift would be discovered by the robot.
+#
+# `retreat` is deliberately NOT disabled: backing off in the dark is precisely
+# when backing off is most useful, and a blanket disable here would be the
+# wrong call in every room.
+[[inhibit]]
+id = "dark-inhibit"
+when = { field = "light_level", op = "lt", value = 0.05 }
+disable = ["wave"]
+
+# --------------------------------------------------------------------------
+# modes — declarative parameter sets, selected by active_mode
+# --------------------------------------------------------------------------
+#
+# A mode is a flat bag of numbers layered UNDER a rule's own params: a knob the
+# action does not declare is ignored rather than refused, since a mode is a
+# broad tuning applied across actions and one irrelevant key must not break
+# every one of them.
+[modes.gentle]
+speed = 0.4
+amplitude = 8.0
+
+[modes.brisk]
+speed = 1.8
+amplitude = 25.0

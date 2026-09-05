@@ -1,0 +1,88 @@
+name: Go
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - "cmd/**"
+      - "internal/**"
+      - "Makefile"
+      - ".github/workflows/go.yml"
+  push:
+    branches: [main]
+    paths:
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - "cmd/**"
+      - "internal/**"
+      - "Makefile"
+      - ".github/workflows/go.yml"
+
+# Two robot CLIs (reachy-mini-cli, microduck-cli) will consume this engine's
+# binary on whatever their build box happens to be; linux/amd64 and
+# linux/arm64 are the two shapes that matter today (a dev box and a Jetson,
+# e.g. this repo's own arm64 dev toolchain). CGO_ENABLED=0 is load-bearing,
+# not a style choice: it is the only way to get a binary with no libc
+# dependency to run on either.
+jobs:
+  build:
+    name: build (${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        goarch: [amd64, arm64]
+    env:
+      CGO_ENABLED: "0"
+      GOARCH: ${{ matrix.goarch }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      # The amd64 runner can't natively execute arm64 test/exercise binaries.
+      # Register QEMU's binfmt_misc handlers so the kernel transparently
+      # emulates them -- `go test`/`go run` on the arm64 leg then behave
+      # exactly like the amd64 leg, no -exec= wrapper needed.
+      - name: set up QEMU (for arm64 leg)
+        if: matrix.goarch == 'arm64'
+        uses: docker/setup-qemu-action@49b3bc8e6bdd4a60e6116a5414239cba5943d3cf # v3
+        with:
+          platforms: arm64
+
+      - run: go vet ./...
+
+      - run: go test ./...
+
+      - name: go build
+        run: go build -o dist/neurosymbolic-engine ./cmd/neurosymbolic-engine
+
+      # Acceptance criterion 2: the artifact must be statically linked (no
+      # libc dependency) so it runs unmodified on a bare box or a from-scratch
+      # container. `file` reports "statically linked"; fail loudly otherwise
+      # rather than let a regression (e.g. an accidental cgo import) ship.
+      - name: assert static binary
+        run: |
+          file dist/neurosymbolic-engine
+          file dist/neurosymbolic-engine | grep -q "statically linked" || {
+            echo "::error::dist/neurosymbolic-engine is not statically linked" >&2
+            exit 1
+          }
+
+      # Exercises the -ldflags contract end-to-end (not just via the Go test
+      # suite): a version/revision stamped at build time must round-trip
+      # through the `version` verb on stdout with exit 0. QEMU (registered
+      # above for the arm64 leg) makes this runnable cross-arch.
+      - name: exercise version verb
+        run: |
+          go build -ldflags "-X main.version=1.2.3 -X main.revision=abc1234" \
+            -o dist/neurosymbolic-engine-versioned ./cmd/neurosymbolic-engine
+          out="$(./dist/neurosymbolic-engine-versioned version)"
+          test "$out" = "neurosymbolic-engine 1.2.3 (abc1234)"

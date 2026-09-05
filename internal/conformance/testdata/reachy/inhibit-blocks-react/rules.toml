@@ -1,0 +1,23 @@
+# Derived from tests/test_behavior_rule_engine.py's `_react("hear", "speech",
+# "is_true", "nod")` and `_inhibit("hush", "pat", "is_true", ["nod"])`, with
+# the donor helper's own defaults kept: `cooldown_s = 5.0`, `hysteresis = 0.0`,
+# and the helper's `_AUTO_DURATION_S = 60.0` for an unbounded looping target
+# (this runtime refuses such a react rule with no `duration_s` of its own,
+# exactly as the donor's schema does).
+#
+# `speech_detected` is the donor `Sense` field name; the donor test's `_react`
+# helper spells it `speech`.
+
+schema_version = 1
+
+[[react]]
+id = "hear"
+when = { field = "speech_detected", op = "is_true" }
+run = "nod"
+duration_s = 60.0
+cooldown_s = 5.0
+
+[[inhibit]]
+id = "hush"
+when = { field = "pat", op = "is_true" }
+disable = ["nod"]

@@ -1,0 +1,2 @@
+// Identical to the stop-when-limp case: limp from the first tick.
+{"tick": 1, "fields": {"limp": true}}

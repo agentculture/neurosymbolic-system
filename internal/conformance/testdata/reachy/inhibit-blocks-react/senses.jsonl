@@ -1,0 +1,4 @@
+// Tick 1: addressed AND being patted -> the react is inhibited.
+// Tick 2: the pat stops -> the inhibit lifts and the react fires.
+{"tick": 1, "fields": {"speech_detected": true, "pat": true}}
+{"tick": 2, "fields": {"pat": false}}

@@ -1,0 +1,248 @@
+# MicroDuck as an ADAPTOR CONFIG — the second donor's plant, described as data.
+#
+# Shared by every case under `testdata/microduck/`.
+#
+# DERIVED from the donor (must not drift):
+#
+#   * the six channels, from `microduck_cli/behavior/model.py`'s
+#     `CHANNELS = ("twist", "head", "pose", "mouth", "sound", "skill")`;
+#   * the sense field names, from `microduck_cli/behavior/sense.py`'s `Sense`
+#     dataclass — `fallen`, `limp` and `battery_frac` are the three the shipped
+#     `default_rules.toml` keys on;
+#   * the seven action names and the channels each claims, from
+#     `microduck_cli/behavior/intents.py`'s `_build_*` functions
+#     (`do` -> skill, `look` -> head, `move` -> twist, `sound` -> sound+mouth,
+#     `stop` -> twist+pose, `mode` -> twist, `idle` -> pose).
+#
+# FIXTURE CHOICES: every arity, neutral, trajectory and param domain, exactly as
+# in the reachy vocabulary beside this one. The donor's contention CLASSES are
+# NOT expressible here — this runtime gives a rule-fired action the stoppable
+# class and the base layer the passive one — so `do`'s UNSTOPPABLE and `stop`'s
+# STOPPING are not reproduced; see the verification doc's "Not reproduced".
+
+# --- channels ---------------------------------------------------------------
+
+[[channels]]
+  name = "twist"
+  arity = 3
+  neutral = [0.0, 0.0, 0.0]
+
+[[channels]]
+  name = "head"
+  arity = 2
+  neutral = [0.0, 0.0]
+
+[[channels]]
+  name = "pose"
+  arity = 3
+  neutral = [0.0, 0.0, 0.0]
+
+[[channels]]
+  name = "mouth"
+  arity = 1
+  neutral = [0.0]
+
+[[channels]]
+  name = "sound"
+  arity = 1
+  neutral = [0.0]
+
+[[channels]]
+  name = "skill"
+  arity = 1
+  neutral = [0.0]
+
+# --- senses -----------------------------------------------------------------
+
+[[senses]]
+  name = "fallen"
+  type = "bool"
+
+[[senses]]
+  name = "limp"
+  type = "bool"
+
+[[senses]]
+  name = "battery_frac"
+  type = "float"
+
+[[senses]]
+  name = "pad_active"
+  type = "bool"
+
+[[senses]]
+  name = "tof_nearest_m"
+  type = "float"
+
+[[senses]]
+  name = "hottest_servo_c"
+  type = "float"
+
+[[senses]]
+  name = "loop_hz"
+  type = "float"
+
+[[senses]]
+  name = "enabled"
+  type = "bool"
+
+[[senses]]
+  name = "self_moving"
+  type = "bool"
+
+[[senses]]
+  name = "remote_session"
+  type = "bool"
+
+[[senses]]
+  name = "policy"
+  type = "string"
+
+# --- actions ----------------------------------------------------------------
+
+# idle — the donor's PASSIVE resting layer, on `pose`. It is seeded as this
+# runtime's base layer in every microduck case, and `fallen-inhibit` disables
+# it BY NAME, which is why the fallen case watches the base layer itself go.
+[[actions]]
+  name = "idle"
+  claims = ["pose"]
+  loops = true
+
+  [actions.trajectories]
+    [actions.trajectories.pose]
+      [[actions.trajectories.pose.keyframes]]
+        t = 0.0
+        value = [0.0, 0.0, 0.0]
+      [[actions.trajectories.pose.keyframes]]
+        t = 1.5
+        value = [0.0, 0.0, 4.0]
+      [[actions.trajectories.pose.keyframes]]
+        t = 3.0
+        value = [0.0, 0.0, 0.0]
+
+# move — commanded driving on `twist`.
+[[actions]]
+  name = "move"
+  claims = ["twist"]
+  loops = true
+
+  [[actions.params]]
+    name = "vx"
+    min = -1.0
+    max = 1.0
+
+  [[actions.params]]
+    name = "vy"
+    min = -1.0
+    max = 1.0
+
+  [[actions.params]]
+    name = "vyaw"
+    min = -3.0
+    max = 3.0
+
+  [actions.trajectories]
+    [actions.trajectories.twist]
+      [actions.trajectories.twist.easing]
+        kind = "ease_in_out"
+        from = [0.0, 0.0, 0.0]
+        to = [0.2, 0.0, 0.0]
+        duration_s = 0.4
+
+# stop — zero twist, and a held pose. The donor's `stop` never touches `skill`,
+# so it cannot interrupt a canned skill already running.
+[[actions]]
+  name = "stop"
+  claims = ["twist", "pose"]
+  loops = false
+
+  [actions.trajectories]
+    [actions.trajectories.twist]
+      [actions.trajectories.twist.easing]
+        kind = "hold"
+        from = [0.0, 0.0, 0.0]
+        to = [0.0, 0.0, 0.0]
+        duration_s = 0.2
+
+    [actions.trajectories.pose]
+      [actions.trajectories.pose.easing]
+        kind = "hold"
+        from = [0.0, 0.0, 0.0]
+        to = [0.0, 0.0, 0.0]
+        duration_s = 0.2
+
+# look — aiming the head.
+[[actions]]
+  name = "look"
+  claims = ["head"]
+  loops = false
+
+  [[actions.params]]
+    name = "yaw"
+    min = -90.0
+    max = 90.0
+
+  [[actions.params]]
+    name = "pitch"
+    min = -45.0
+    max = 45.0
+
+  [actions.trajectories]
+    [actions.trajectories.head]
+      [actions.trajectories.head.easing]
+        kind = "linear"
+        from = [0.0, 0.0]
+        to = [20.0, 0.0]
+        duration_s = 0.5
+
+# sound — a noise plus the mouth that makes it.
+[[actions]]
+  name = "sound"
+  claims = ["sound", "mouth"]
+  loops = false
+
+  [actions.trajectories]
+    [actions.trajectories.sound]
+      [[actions.trajectories.sound.keyframes]]
+        t = 0.0
+        value = [1.0]
+      [[actions.trajectories.sound.keyframes]]
+        t = 0.3
+        value = [0.0]
+
+    [actions.trajectories.mouth]
+      [[actions.trajectories.mouth.keyframes]]
+        t = 0.0
+        value = [1.0]
+      [[actions.trajectories.mouth.keyframes]]
+        t = 0.3
+        value = [0.0]
+
+# mode — a stance switch that expects to hold the twist.
+[[actions]]
+  name = "mode"
+  claims = ["twist"]
+  loops = false
+
+  [actions.trajectories]
+    [actions.trajectories.twist]
+      [actions.trajectories.twist.easing]
+        kind = "hold"
+        from = [0.0, 0.0, 0.0]
+        to = [0.0, 0.0, 0.0]
+        duration_s = 0.3
+
+# do — a canned skill, on its own channel.
+[[actions]]
+  name = "do"
+  claims = ["skill"]
+  loops = false
+
+  [actions.trajectories]
+    [actions.trajectories.skill]
+      [[actions.trajectories.skill.keyframes]]
+        t = 0.0
+        value = [1.0]
+      [[actions.trajectories.skill.keyframes]]
+        t = 2.0
+        value = [0.0]

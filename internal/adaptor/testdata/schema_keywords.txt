@@ -1,0 +1,28 @@
+# Rules-file SCHEMA keywords the engine legitimately spells as string literals.
+#
+# These are subtracted from donor_names.txt before TestNoDonorLiteralsInEngine-
+# Sources runs. They are keys of the rules FILE FORMAT — the engine's own
+# vocabulary, identical on every robot — that happen to collide with a word one
+# donor also uses for a sense field or an action. The rules loader must be able
+# to name its own schema; a guard that forbade that would be forbidding the
+# wrong thing.
+#
+# The bar for adding a line here: the literal is a key or section name of the
+# rules file format, spelled the same way for Reachy Mini and MicroDuck alike,
+# and no channel or action name may be exempted on any grounds. Every entry
+# carries its justification on the line above it.
+
+# `[[react]]` / `[[inhibit]]` entries carry `enabled = false` as a TOMBSTONE:
+# one line in the box-local overlay disables a shipped rule of that id without
+# forking its body. It collides with microduck's `enabled` sense field.
+enabled
+
+# `[modes.<name>]` is the declarative parameter-set section of a rules file, and
+# the loader's diagnostics name a single one of them "mode". It collides with
+# microduck's `mode` sense field and its `mode` intent kind.
+mode
+
+# `active_mode` is the top-level key selecting which `[modes.*]` table is in
+# force. Not itself a donor name — listed so a future substring-shaped matcher
+# cannot silently start flagging it again, as one did before this file existed.
+active_mode

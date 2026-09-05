@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-09-05
+
+### Added
+
+- **The Go rule engine.** `cmd/neurosymbolic-engine`, one static binary (CGO off, linux/arm64 first-class, linux/amd64 for dev) built from `internal/`: `rules` (TOML schema v1 and v2 with `all`/`any` conjunction, layered per-id merge, tombstones, modes, `params`, `say`, fail-closed validation naming the rule id; both donors' shipped rules files load unchanged), `adaptor` (channels with arity and neutral, typed senses, actions with param domains and per-channel trajectories; JSON and TOML loaders; the engine carries no robot literal, enforced by a guard test), `tick` (injected clock, the four contention classes ported from reachy-mini-cli, abstention-aware arbitration, complete-pose composition, trajectory sampling, one state-owning goroutine, seam panic isolation), `sense` + `ruleeval` (engine-owned snapshot with per-field freshness; cooldown, hysteresis, `duration_s`, `absent_for`; one admission registry for rule fires and agent intents; fault-isolating bus), `events` (source/type dialect with priority, urgency, dedupe and a default entry), `senselog` (the `[SENSE stage=… source=… event=…]` stderr grammar, per-episode streaks, goroutine-safe), `stream` (unix socket or stdio, length-prefixed JSON frames, protocol version, heartbeat, end-of-stream with the settling pose flushed first, event frames, backpressure as a named drop, 0600 socket, no TCP without `--insecure-tcp`), `mgmt` + `clifmt` (`whoami`, `version`, `doctor`, `status`, `rules check/list/migrate/reload`, `bench`, `run`; the `{code, message, remediation}` error contract, exit 0/1/2, `--json`), `provider` (OpenAI-compatible embeddings and small-model client, warmed at startup, off-thread behind a bounded queue, writing declared sense fields), `compose` (`neurosymbolic-engine run --adaptor --rules --socket-dir|--stdio --period --heartbeat --base-action --provider`), `bench`, `conformance` (nine fixtures derived from both donors' rule tests), `allowlist` (import guard with the `// allow:` go.mod convention).
+- **Python management surface.** `neurosymbolic_system/engine_client.py` (stdlib client relaying the engine's error body verbatim, engine locator via PATH or `NEUROSYMBOLIC_ENGINE`), the `engine` and `rules` noun groups, and two warning-severity doctor checks (`engine_present`, `engine_protocol`).
+- **Evidence.** `docs/verification/2026-09-05-arm64-bench.md` (DGX Spark GB10: 200 rules over 20 fields, p50 177 µs, p99 616 µs, 0 overruns in 10 000 ticks, RSS 10.3 MB) and `docs/verification/2026-09-05-donor-conformance.md` (the re-measured donor counts and what is not reproduced); `tests/toy_robot/` (a third robot integrated with a config, a rules file and a 189-line stdlib client) with end-to-end tests over socket and stdio including SIGTERM, SIGKILL and stdin-close settle.
+- **Method artifacts.** The devague spec, plan and delivery summary under `docs/specs`, `docs/plans`, `docs/deliveries`; `docs/handoff/` drafts for the three consumer repositories; `docs/go-dependencies.md`; `.github/workflows/go.yml`; the Python CI job now builds the engine so engine-backed tests run.
+- Decisions made during the run are filed as issues #4–#15 (label `decision`).
+
+### Changed
+
+- `README.md` and `CLAUDE.md` describe the runtime as built: the adaptor guide, the two transports and wire protocol, the safety boundary (motor collision and limit safety stays on the consumer's motor-control surface), and the rule that only this repository is touched — siblings are read, never written; consumers pull the engine and test on their side.
+- `.markdownlint-cli2.yaml` ignores devague exports, `.devague/` and `vendor/`.
+
 ## [0.8.0] - 2026-08-29
 
 ### Changed

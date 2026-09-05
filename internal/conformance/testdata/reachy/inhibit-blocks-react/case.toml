@@ -1,0 +1,10 @@
+# reachy / inhibit-blocks-react — an inhibit refuses a rule-fired action while
+# its predicate holds, and lifts the moment the predicate clears.
+#
+# Donor tests: tests/test_behavior_rule_engine.py
+#   `test_inhibit_blocks_react_and_logs_inhibited` (the react is suppressed
+#   `reason=inhibited`, the inhibit fires, and the named behavior is evicted)
+#   and `test_inhibit_lifts_when_predicate_clears` (the next tick admits it).
+period_ms = 250
+ticks = 4
+base_action = "feel-alive"

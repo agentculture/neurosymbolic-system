@@ -1,0 +1,24 @@
+{"tick":1,"events":[{"name":"rule.fire","data":{"behavior":"pet-reaction","disable":[],"field":"pat","kind":"react","op":"is_true","params":null,"reason":"fired","rule":"pat-acknowledge","say":"","tick":1,"ts":0.25}}],"ownership":{"antennas":"feel-alive-1","body_yaw":"feel-alive-1","head":"feel-alive-1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":2,"events":[{"name":"rule.suppress","data":{"field":"pat","kind":"react","op":"is_true","reason":"cooldown","rule":"pat-acknowledge","tick":2,"ts":0.5}}],"ownership":{"antennas":"rule:pet-reaction:1","body_yaw":"rule:pet-reaction:1","head":"rule:pet-reaction:1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":3,"events":[],"ownership":{"antennas":"rule:pet-reaction:1","body_yaw":"rule:pet-reaction:1","head":"rule:pet-reaction:1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":4,"events":[],"ownership":{"antennas":"rule:pet-reaction:1","body_yaw":"rule:pet-reaction:1","head":"rule:pet-reaction:1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":5,"events":[],"ownership":{"antennas":"feel-alive-1","body_yaw":"feel-alive-1","head":"feel-alive-1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":6,"events":[],"ownership":{"antennas":"feel-alive-1","body_yaw":"feel-alive-1","head":"feel-alive-1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":7,"events":[],"ownership":{"antennas":"feel-alive-1","body_yaw":"feel-alive-1","head":"feel-alive-1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":8,"events":[],"ownership":{"antennas":"feel-alive-1","body_yaw":"feel-alive-1","head":"feel-alive-1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":9,"events":[],"ownership":{"antennas":"feel-alive-1","body_yaw":"feel-alive-1","head":"feel-alive-1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":10,"events":[],"ownership":{"antennas":"feel-alive-1","body_yaw":"feel-alive-1","head":"feel-alive-1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":11,"events":[],"ownership":{"antennas":"feel-alive-1","body_yaw":"feel-alive-1","head":"feel-alive-1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":12,"events":[],"ownership":{"antennas":"feel-alive-1","body_yaw":"feel-alive-1","head":"feel-alive-1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":13,"events":[],"ownership":{"antennas":"feel-alive-1","body_yaw":"feel-alive-1","head":"feel-alive-1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":14,"events":[],"ownership":{"antennas":"feel-alive-1","body_yaw":"feel-alive-1","head":"feel-alive-1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":15,"events":[],"ownership":{"antennas":"feel-alive-1","body_yaw":"feel-alive-1","head":"feel-alive-1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":16,"events":[],"ownership":{"antennas":"feel-alive-1","body_yaw":"feel-alive-1","head":"feel-alive-1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":17,"events":[],"ownership":{"antennas":"feel-alive-1","body_yaw":"feel-alive-1","head":"feel-alive-1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":18,"events":[],"ownership":{"antennas":"feel-alive-1","body_yaw":"feel-alive-1","head":"feel-alive-1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":19,"events":[],"ownership":{"antennas":"feel-alive-1","body_yaw":"feel-alive-1","head":"feel-alive-1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":20,"events":[],"ownership":{"antennas":"feel-alive-1","body_yaw":"feel-alive-1","head":"feel-alive-1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":21,"events":[{"name":"rule.suppress","data":{"field":"pat","kind":"react","op":"is_true","reason":"cooldown suppressed 19 ticks","rule":"pat-acknowledge","tick":21,"ticks":19,"ts":5.25}},{"name":"rule.fire","data":{"behavior":"pet-reaction","disable":[],"field":"pat","kind":"react","op":"is_true","params":null,"reason":"fired","rule":"pat-acknowledge","say":"","tick":21,"ts":5.25}}],"ownership":{"antennas":"feel-alive-1","body_yaw":"feel-alive-1","head":"feel-alive-1"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":22,"events":[{"name":"rule.suppress","data":{"field":"pat","kind":"react","op":"is_true","reason":"cooldown","rule":"pat-acknowledge","tick":22,"ts":5.5}}],"ownership":{"antennas":"rule:pet-reaction:2","body_yaw":"rule:pet-reaction:2","head":"rule:pet-reaction:2"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":23,"events":[],"ownership":{"antennas":"rule:pet-reaction:2","body_yaw":"rule:pet-reaction:2","head":"rule:pet-reaction:2"},"pose_channels":["antennas","body_yaw","head"]}
+{"tick":24,"events":[],"ownership":{"antennas":"rule:pet-reaction:2","body_yaw":"rule:pet-reaction:2","head":"rule:pet-reaction:2"},"pose_channels":["antennas","body_yaw","head"]}

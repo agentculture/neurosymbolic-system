@@ -1,0 +1,20 @@
+# reachy / pat-acknowledge — a fire, then the cooldown episode that tames it.
+#
+# Donor test: tests/test_behavior_rule_engine.py
+#   `test_cooldown_skip_is_logged_with_reason` (fire, then a gated streak that
+#   logs ONE entry line, not one per tick) and
+#   `test_every_tick_refire_settles_under_cooldown` (a refire that settles under
+#   cooldown instead of firing every matching tick), plus
+#   tests/test_behavior_default_rules.py, which pins `pat-acknowledge`'s
+#   `cooldown_s = 5.0`.
+#
+# Rules: the donor's SHIPPED defaults, verbatim (plus the `schema_version = 1`
+# line the donor predates). Nothing here is a rule written for the fixture.
+#
+# 250 ms steps are the donor rule-engine tests' own cadence (`_drive_ticks`
+# uses dt = 0.25, start = 0.25). 24 ticks reaches t = 6.0 s, which is past the
+# 5 s cooldown, so the refire is inside the window.
+period_ms = 250
+ticks = 24
+base_action = "feel-alive"
+rule_layers = ["default_rules.v1.toml"]

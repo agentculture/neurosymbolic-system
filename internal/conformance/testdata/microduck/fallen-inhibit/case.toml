@@ -1,0 +1,20 @@
+# microduck / fallen-inhibit — a fallen duck must not be fought: every action
+# this layer could inject is disabled, and a running one is EVICTED.
+#
+# Donor tests: tests/test_rule_engine.py
+#   `test_an_inhibit_rule_suppresses_the_named_action_as_a_named_drop` (the
+#   react is dropped `reason=inhibited` and the drop names both the inhibit's
+#   rule id and the disabled action) and
+#   `test_an_inhibit_rule_stops_inhibiting_when_its_predicate_lapses`;
+#   tests/test_default_rules.py pins `fallen-inhibit`'s disable list.
+#
+# 50 Hz is the donor's own cadence (`TICK_HZ = 50.0` in test_rule_engine.py).
+#
+# The base layer is `idle`, and `fallen-inhibit` disables `idle` BY NAME — so
+# the base layer itself is evicted at the fallen tick and every channel falls
+# to neutral. That is the donor's rule doing exactly what it says, not a
+# fixture accident.
+period_ms = 20
+ticks = 12
+base_action = "idle"
+rule_layers = ["default_rules.toml", "overlay.toml"]

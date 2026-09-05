@@ -33,6 +33,8 @@ Commands
   neurosymbolic-system overview           Descriptive snapshot of the agent.
   neurosymbolic-system doctor             Check the agent-identity invariants.
   neurosymbolic-system cli overview       Describe the CLI surface itself.
+  neurosymbolic-system engine overview    Describe the engine noun group.
+  neurosymbolic-system rules overview     Describe the rules noun group.
 
 Machine-readable output
 -----------------------
@@ -64,6 +66,8 @@ def _as_json_payload() -> dict[str, object]:
             {"path": ["overview"], "summary": "Descriptive snapshot of the agent."},
             {"path": ["doctor"], "summary": "Check the agent-identity invariants."},
             {"path": ["cli", "overview"], "summary": "Describe the CLI surface."},
+            {"path": ["engine", "overview"], "summary": "Describe the engine noun group."},
+            {"path": ["rules", "overview"], "summary": "Describe the rules noun group."},
         ],
         "exit_codes": {
             "0": "success",

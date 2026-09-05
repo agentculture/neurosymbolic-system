@@ -1,0 +1,5 @@
+// One utterance that already cleared the donor's engagement gate, then gone.
+// `null` CLEARS the field — the one way a transport says "this reading is
+// gone", never inferred from a frame's silence.
+{"tick": 1, "fields": {"transcript": "Reachy, are you there?"}}
+{"tick": 2, "fields": {"transcript": null}}

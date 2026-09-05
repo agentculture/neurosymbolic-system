@@ -71,6 +71,27 @@ def test_cli_overview_unknown_flag_structured_error(
     assert "hint:" in err
 
 
+# --- engine overview / rules overview (t12) --------------------------------
+
+
+def test_engine_overview_json_shape(capsys: pytest.CaptureFixture[str]) -> None:
+    rc = main(["engine", "overview", "--json"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["subject"] == "neurosymbolic-system engine"
+    assert isinstance(payload["sections"], list)
+    assert payload["sections"]
+
+
+def test_rules_overview_json_shape(capsys: pytest.CaptureFixture[str]) -> None:
+    rc = main(["rules", "overview", "--json"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["subject"] == "neurosymbolic-system rules"
+    assert isinstance(payload["sections"], list)
+    assert payload["sections"]
+
+
 # --- doctor ---------------------------------------------------------------
 
 
@@ -89,6 +110,36 @@ def test_doctor_json_shape(capsys: pytest.CaptureFixture[str]) -> None:
     assert payload["checks"]
     for check in payload["checks"]:
         assert {"id", "passed", "severity", "message", "remediation"} <= set(check)
+
+
+def test_doctor_check_count(capsys: pytest.CaptureFixture[str]) -> None:
+    """t12: backend/prompt-file + skills_present + engine_present, plus
+    engine_protocol only when an engine binary is actually locatable — so the
+    count is 3 or 4 depending on the box, never fewer or more.
+    """
+    main(["doctor", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    check_ids = {c["id"] for c in payload["checks"]}
+    assert "skills_present" in check_ids
+    assert "engine_present" in check_ids
+    if "engine_protocol" in check_ids:
+        assert len(payload["checks"]) == 4
+    else:
+        assert len(payload["checks"]) == 3
+
+
+def test_doctor_engine_checks_are_warning_severity(capsys: pytest.CaptureFixture[str]) -> None:
+    """The engine checks never gate the overall `healthy` verdict (t12 design:
+    only severity=='error' checks do), so a box with no engine built yet still
+    reports the agent-identity invariants as healthy.
+    """
+    rc = main(["doctor", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    for check in payload["checks"]:
+        if check["id"] in ("engine_present", "engine_protocol"):
+            assert check["severity"] == "warning"
+    assert rc == 0
+    assert payload["healthy"] is True
 
 
 def test_doctor_recognizes_declared_backend(capsys: pytest.CaptureFixture[str]) -> None:

@@ -1,0 +1,3 @@
+// Driving from tick 1; down at tick 6.
+{"tick": 1, "fields": {"pad_active": true}}
+{"tick": 6, "fields": {"fallen": true}}

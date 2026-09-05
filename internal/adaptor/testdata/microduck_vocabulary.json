@@ -1,0 +1,466 @@
+{
+  "channels": [
+    {
+      "name": "twist",
+      "arity": 3,
+      "neutral": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "head",
+      "arity": 2,
+      "neutral": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "pose",
+      "arity": 4,
+      "neutral": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "mouth",
+      "arity": 1,
+      "neutral": [
+        0.0
+      ]
+    },
+    {
+      "name": "sound",
+      "arity": 1,
+      "neutral": [
+        0.0
+      ]
+    },
+    {
+      "name": "skill",
+      "arity": 1,
+      "neutral": [
+        0.0
+      ]
+    }
+  ],
+  "senses": [
+    {
+      "name": "fallen",
+      "type": "bool"
+    },
+    {
+      "name": "limp",
+      "type": "bool"
+    },
+    {
+      "name": "gravity",
+      "type": "vec3"
+    },
+    {
+      "name": "loop_hz",
+      "type": "float"
+    },
+    {
+      "name": "policy",
+      "type": "string"
+    },
+    {
+      "name": "move_applied",
+      "type": "vec3"
+    },
+    {
+      "name": "move_requested",
+      "type": "vec3"
+    },
+    {
+      "name": "battery_frac",
+      "type": "float"
+    },
+    {
+      "name": "hottest_servo_c",
+      "type": "float"
+    },
+    {
+      "name": "remote_session",
+      "type": "bool"
+    },
+    {
+      "name": "mode",
+      "type": "string"
+    },
+    {
+      "name": "pad_active",
+      "type": "bool",
+      "age_field": "pad_age_s"
+    },
+    {
+      "name": "tof_nearest_m",
+      "type": "float",
+      "age_field": "tof_age_s"
+    },
+    {
+      "name": "skills",
+      "type": "string"
+    },
+    {
+      "name": "enabled",
+      "type": "bool"
+    },
+    {
+      "name": "self_moving",
+      "type": "bool"
+    },
+    {
+      "name": "state_age_s",
+      "type": "float"
+    },
+    {
+      "name": "health_age_s",
+      "type": "float"
+    },
+    {
+      "name": "pad_age_s",
+      "type": "float"
+    },
+    {
+      "name": "tof_age_s",
+      "type": "float"
+    }
+  ],
+  "actions": [
+    {
+      "name": "do",
+      "claims": [
+        "skill"
+      ],
+      "loops": false,
+      "trajectories": {
+        "skill": {
+          "easing": {
+            "kind": "hold",
+            "from": [
+              0.0
+            ],
+            "to": [
+              1.0
+            ],
+            "duration_s": 5.0
+          }
+        }
+      },
+      "params": [
+        {
+          "name": "duration_s",
+          "min": 0.0,
+          "max": 10.0
+        }
+      ]
+    },
+    {
+      "name": "idle",
+      "claims": [
+        "twist",
+        "head",
+        "pose",
+        "mouth"
+      ],
+      "loops": true,
+      "trajectories": {
+        "twist": {
+          "easing": {
+            "kind": "hold",
+            "from": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "to": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "duration_s": 1.0
+          }
+        },
+        "head": {
+          "keyframes": [
+            {
+              "t": 0.0,
+              "value": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "t": 2.0,
+              "value": [
+                0.0,
+                -0.1
+              ]
+            },
+            {
+              "t": 4.0,
+              "value": [
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        },
+        "pose": {
+          "easing": {
+            "kind": "ease_in_out",
+            "from": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "to": [
+              0.01,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "duration_s": 4.0
+          }
+        },
+        "mouth": {
+          "easing": {
+            "kind": "linear",
+            "from": [
+              0.0
+            ],
+            "to": [
+              0.0
+            ],
+            "duration_s": 4.0
+          }
+        }
+      }
+    },
+    {
+      "name": "look",
+      "claims": [
+        "head"
+      ],
+      "loops": false,
+      "trajectories": {
+        "head": {
+          "easing": {
+            "kind": "ease_in_out",
+            "from": [
+              0.0,
+              0.0
+            ],
+            "to": [
+              0.5,
+              -0.2
+            ],
+            "duration_s": 1.0
+          }
+        }
+      },
+      "params": [
+        {
+          "name": "yaw",
+          "min": -1.57,
+          "max": 1.57
+        },
+        {
+          "name": "pitch",
+          "min": -1.5707963267948966,
+          "max": 1.0471975511965976
+        }
+      ]
+    },
+    {
+      "name": "mode",
+      "claims": [
+        "skill"
+      ],
+      "loops": false,
+      "trajectories": {
+        "skill": {
+          "easing": {
+            "kind": "hold",
+            "from": [
+              0.0
+            ],
+            "to": [
+              1.0
+            ],
+            "duration_s": 0.5
+          }
+        }
+      }
+    },
+    {
+      "name": "move",
+      "claims": [
+        "twist"
+      ],
+      "loops": false,
+      "trajectories": {
+        "twist": {
+          "easing": {
+            "kind": "linear",
+            "from": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "to": [
+              0.2,
+              0.0,
+              0.0
+            ],
+            "duration_s": 1.0
+          }
+        }
+      },
+      "params": [
+        {
+          "name": "vx",
+          "min": -0.5,
+          "max": 0.5
+        },
+        {
+          "name": "vy",
+          "min": -0.5,
+          "max": 0.5
+        },
+        {
+          "name": "wz",
+          "min": -2.0,
+          "max": 2.0
+        }
+      ]
+    },
+    {
+      "name": "sound",
+      "claims": [
+        "sound"
+      ],
+      "loops": false,
+      "trajectories": {
+        "sound": {
+          "easing": {
+            "kind": "hold",
+            "from": [
+              0.0
+            ],
+            "to": [
+              1.0
+            ],
+            "duration_s": 2.0
+          }
+        }
+      }
+    },
+    {
+      "name": "stop",
+      "claims": [
+        "twist",
+        "head",
+        "pose",
+        "mouth",
+        "sound",
+        "skill"
+      ],
+      "loops": false,
+      "trajectories": {
+        "twist": {
+          "easing": {
+            "kind": "linear",
+            "from": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "to": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "duration_s": 0.5
+          }
+        },
+        "head": {
+          "easing": {
+            "kind": "linear",
+            "from": [
+              0.0,
+              0.0
+            ],
+            "to": [
+              0.0,
+              0.0
+            ],
+            "duration_s": 0.5
+          }
+        },
+        "pose": {
+          "easing": {
+            "kind": "linear",
+            "from": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "to": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "duration_s": 0.5
+          }
+        },
+        "mouth": {
+          "easing": {
+            "kind": "linear",
+            "from": [
+              0.0
+            ],
+            "to": [
+              0.0
+            ],
+            "duration_s": 0.5
+          }
+        },
+        "sound": {
+          "easing": {
+            "kind": "hold",
+            "from": [
+              0.0
+            ],
+            "to": [
+              0.0
+            ],
+            "duration_s": 0.5
+          }
+        },
+        "skill": {
+          "easing": {
+            "kind": "hold",
+            "from": [
+              0.0
+            ],
+            "to": [
+              0.0
+            ],
+            "duration_s": 0.5
+          }
+        }
+      }
+    }
+  ]
+}
