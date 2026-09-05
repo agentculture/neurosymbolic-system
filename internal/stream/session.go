@@ -41,6 +41,12 @@ type session struct {
 	// then locks wmu, so a flush that stopped at an empty channel could let the
 	// end frame win that lock and overtake the very pose it was waiting for.
 	// A counter the writer bumps AFTER its Write has no such window.
+	//
+	// queued is bumped BEFORE the frame reaches the channel, and rolled back if
+	// the queue is full, for the mirror-image reason: a frame visible to the
+	// writer but not yet counted is one the flush does not know to wait for.
+	// Only the tick goroutine writes these two increments, so the rollback is
+	// never contended.
 	queued  atomic.Uint64
 	written atomic.Uint64
 
@@ -231,10 +237,22 @@ func (s *session) enqueue(kind string, payload any) {
 		return
 	default:
 	}
+	// Count the frame BEFORE it becomes visible to the writer, and undo the
+	// count if the queue turns it away.
+	//
+	// The other order leaves a window — a few instructions wide, but reached
+	// from the tick goroutine fifty times a second — in which a frame is on the
+	// queue and uncounted. A Close landing in it reads written >= queued, skips
+	// the drain flushWithin exists to perform, and writes the end frame straight
+	// past a pose the writer still holds: the consumer's last word from the
+	// robot then arrives after the stream has been declared over. Counting
+	// first makes queued an over-estimate at worst, which costs a shutdown one
+	// extra poll and nothing else.
+	s.queued.Add(1)
 	select {
 	case s.out <- outFrame{kind: kind, payload: payload}:
-		s.queued.Add(1)
 	default:
+		s.queued.Add(^uint64(0)) // roll back: nothing was accepted
 		s.srv.drop(kind, "backpressure", fmt.Sprintf(
 			"the consumer is not reading; the outbound queue is full at %d frames",
 			cap(s.out)))
