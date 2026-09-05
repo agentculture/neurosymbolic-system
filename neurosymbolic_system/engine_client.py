@@ -56,10 +56,10 @@ ENV_ENGINE_PATH = "NEUROSYMBOLIC_ENGINE"
 #: Fallback name looked up on PATH when the env var is unset or unusable.
 ENGINE_BINARY_NAME = "neurosymbolic-engine"
 
-#: Default subprocess timeout, seconds. Every verb here is a one-shot local
+#: Default subprocess timeout, in seconds. Every verb here is a one-shot local
 #: process (rule validation, a version print) — 30s is generous headroom, not
 #: a tuned budget.
-DEFAULT_TIMEOUT = 30.0
+DEFAULT_TIMEOUT_S = 30.0
 
 #: This client's expectation of the engine's wire protocol (spec h35). Bump
 #: this only in lockstep with a matching bump on the Go side.
@@ -156,16 +156,16 @@ def _error_from_text_stderr(exit_code: int, stderr: str) -> CliError:
 class EngineClient:
     """Thin subprocess client for one located ``neurosymbolic-engine`` binary."""
 
-    def __init__(self, path: str, *, timeout: float = DEFAULT_TIMEOUT) -> None:
+    def __init__(self, path: str, *, timeout_s: float = DEFAULT_TIMEOUT_S) -> None:
         self.path = path
-        self.timeout = timeout
+        self.timeout_s = timeout_s
 
     def run(
         self,
         verb: str,
         *args: str,
         json: bool = False,
-        timeout: float | None = None,
+        timeout_s: float | None = None,
     ) -> EngineResult:
         """Run ``<binary> <verb-tokens...> <args...> [--json]``.
 
@@ -174,13 +174,13 @@ class EngineClient:
         tokens before ``args``. Raises :class:`CliError` verbatim (relayed
         from the binary's own error body) on a non-zero exit, or a
         client-authored environment error when the binary cannot even be
-        started or exceeds ``timeout``.
+        started or exceeds ``timeout_s``.
         """
         argv = [self.path, *verb.split(), *args]
         if json:
             argv.append("--json")
 
-        effective_timeout = timeout if timeout is not None else self.timeout
+        effective_timeout = timeout_s if timeout_s is not None else self.timeout_s
         try:
             proc = subprocess.run(  # nosec B603 - argv list, shell=False, see module docstring
                 argv,
@@ -271,7 +271,7 @@ def check_protocol(
 __all__ = [
     "ENV_ENGINE_PATH",
     "ENGINE_BINARY_NAME",
-    "DEFAULT_TIMEOUT",
+    "DEFAULT_TIMEOUT_S",
     "EXPECTED_PROTOCOL",
     "find_engine",
     "missing_engine_error",
