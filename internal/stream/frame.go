@@ -26,7 +26,10 @@
 // BOUNDED queue (Config.OutboundQueue, default 8) and dropped, newest-first,
 // with a named senselog line when it is full. Write never blocks, never
 // allocates a socket write on the tick goroutine's critical path and never
-// returns an error, because a slow consumer must cost the robot nothing. A
+// returns an error, because a slow consumer must cost the robot nothing. The
+// queue carries UNENCODED payloads for the same reason: json.Marshal over a
+// pose allocates and scales with the channel count, so the writer goroutine
+// encodes, and the tick goroutine only appends. A
 // layer whose drops are invisible is indistinguishable from one that silently
 // no-ops, so every drop names its reason.
 //

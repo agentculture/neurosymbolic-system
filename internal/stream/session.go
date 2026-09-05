@@ -25,7 +25,7 @@ type session struct {
 	w      io.Writer
 	closer io.Closer
 
-	out  chan []byte
+	out  chan outFrame
 	quit chan struct{}
 
 	wmu        sync.Mutex
@@ -61,7 +61,7 @@ type session struct {
 func newSession(srv *Server, r io.Reader, w io.Writer, closer io.Closer) *session {
 	return &session{
 		srv: srv, r: r, w: w, closer: closer,
-		out:        make(chan []byte, srv.cfg.OutboundQueue),
+		out:        make(chan outFrame, srv.cfg.OutboundQueue),
 		quit:       make(chan struct{}),
 		writerDone: make(chan struct{}),
 	}
@@ -198,9 +198,26 @@ func (s *session) send(payload any) error {
 	return nil
 }
 
+// outFrame is one queued telemetry frame, UNENCODED.
+//
+// The queue carries the payload value rather than its bytes because everything
+// that enqueues runs on the tick goroutine, and json.Marshal over a pose both
+// allocates and costs time proportional to the channel count. An export leg on
+// the tick thread is a timestamp and a bounded append, nothing more; the
+// encode belongs to the writer goroutine, which is allowed to be slow. kind
+// rides along so a failure in the writer can still name what it dropped.
+//
+// Payloads are safe to encode later because every producer hands over a value
+// it does not keep: the engine composes a fresh pose map per tick, and the
+// heartbeat and event bodies are built at the call site.
+type outFrame struct {
+	kind    string
+	payload any
+}
+
 // enqueue puts one telemetry frame on the bounded queue, or DROPS it with a
-// named line. It never blocks: pose, event and heartbeat frames are emitted
-// from the tick goroutine, and at 50 Hz the budget is 20 ms.
+// named line. It never blocks and never encodes: pose, event and heartbeat
+// frames are emitted from the tick goroutine, and at 50 Hz the budget is 20 ms.
 //
 // The drop is newest-first — the frame in hand is the one discarded — so a
 // consumer that catches up receives a contiguous older window rather than a
@@ -214,13 +231,8 @@ func (s *session) enqueue(kind string, payload any) {
 		return
 	default:
 	}
-	body, err := encodeFrame(payload)
-	if err != nil {
-		s.srv.drop(kind, "frame-too-large", err.Error())
-		return
-	}
 	select {
-	case s.out <- body:
+	case s.out <- outFrame{kind: kind, payload: payload}:
 		s.queued.Add(1)
 	default:
 		s.srv.drop(kind, "backpressure", fmt.Sprintf(
@@ -233,22 +245,43 @@ func (s *session) writeLoop() {
 	defer close(s.writerDone)
 	for {
 		select {
-		case body := <-s.out:
-			s.wmu.Lock()
-			_, err := s.w.Write(body)
-			s.wmu.Unlock()
-			if err != nil {
-				s.srv.note("writer", "outbound", "the peer's connection failed: "+
-					firstLine(err.Error()))
-				s.srv.detach(s)
+		case frame := <-s.out:
+			if !s.writeFrame(frame) {
 				return
 			}
-			s.written.Add(1)
-			s.srv.framesOut.Add(1)
 		case <-s.quit:
 			return
 		}
 	}
+}
+
+// writeFrame encodes and writes one dequeued telemetry frame, and reports
+// whether the writer goroutine survives it.
+//
+// A payload that will not encode is a NAMED DROP here rather than a refusal on
+// the tick goroutine — that is the cost of deferring the encode, and it is
+// paid by naming the drop where it happens. It still counts as written: the
+// frame has left the queue and can never be written, so a shutdown flush
+// waiting on the counters must not sit out its whole grace for it.
+func (s *session) writeFrame(frame outFrame) bool {
+	body, err := encodeFrame(frame.payload)
+	if err != nil {
+		s.srv.drop(frame.kind, "frame-too-large", err.Error())
+		s.written.Add(1)
+		return true
+	}
+	s.wmu.Lock()
+	_, err = s.w.Write(body)
+	s.wmu.Unlock()
+	if err != nil {
+		s.srv.note("writer", "outbound", "the peer's connection failed: "+
+			firstLine(err.Error()))
+		s.srv.detach(s)
+		return false
+	}
+	s.written.Add(1)
+	s.srv.framesOut.Add(1)
+	return true
 }
 
 func (s *session) readLoop() {
