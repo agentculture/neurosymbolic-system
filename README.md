@@ -32,6 +32,22 @@ extracted" as it lands on disk.
 - **A build + deploy baseline** — pytest, lint, the agent-first rubric gate, and
   PyPI Trusted Publishing wired into GitHub Actions.
 
+## Go engine
+
+`cmd/neurosymbolic-engine` is a stdlib-only Go module scaffold (t1) — a
+`version` verb today, later tasks add the tick engine. Build with a stamped
+version/revision:
+
+```bash
+CGO_ENABLED=0 go build \
+  -ldflags "-X main.version=$(git describe --tags --always) -X main.revision=$(git rev-parse --short HEAD)" \
+  -o neurosymbolic-engine ./cmd/neurosymbolic-engine
+```
+
+CI (`.github/workflows/go.yml`) builds and tests `linux/amd64` and
+`linux/arm64` with `CGO_ENABLED=0` and asserts the artifact is statically
+linked.
+
 ## Quickstart
 
 ```bash
