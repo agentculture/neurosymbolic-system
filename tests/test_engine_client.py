@@ -141,6 +141,35 @@ def test_run_missing_binary_raises_missing_engine_error() -> None:
     assert err.message == "neurosymbolic-engine not found"
 
 
+def test_run_non_executable_file_raises_environment_error(tmp_path: Path) -> None:
+    # A regular file with no exec bit: subprocess.run raises PermissionError
+    # (an OSError subclass distinct from FileNotFoundError) trying to launch
+    # it — this must not leak as a traceback.
+    not_exec = tmp_path / "neurosymbolic-engine"
+    not_exec.write_text("#!/bin/sh\necho hi\n", encoding="utf-8")
+    client = EngineClient(str(not_exec))
+    with pytest.raises(CliError) as excinfo:
+        client.run("version")
+    err = excinfo.value
+    assert err.code == EXIT_ENV_ERROR
+    assert str(not_exec) in err.message
+    assert "go build" in err.remediation
+    assert "NEUROSYMBOLIC_ENGINE" in err.remediation
+
+
+def test_run_directory_as_path_raises_environment_error(tmp_path: Path) -> None:
+    # Launching a directory raises IsADirectoryError (also an OSError
+    # subclass), exercised at the EngineClient level directly (find_engine
+    # itself would already refuse a directory via its is-file check).
+    client = EngineClient(str(tmp_path))
+    with pytest.raises(CliError) as excinfo:
+        client.run("version")
+    err = excinfo.value
+    assert err.code == EXIT_ENV_ERROR
+    assert str(tmp_path) in err.message
+    assert "go build" in err.remediation
+
+
 # --- check_protocol (spec h35) ----------------------------------------------
 
 

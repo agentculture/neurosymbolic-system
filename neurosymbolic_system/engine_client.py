@@ -174,7 +174,8 @@ class EngineClient:
         tokens before ``args``. Raises :class:`CliError` verbatim (relayed
         from the binary's own error body) on a non-zero exit, or a
         client-authored environment error when the binary cannot even be
-        started or exceeds ``timeout_s``.
+        started (including a non-executable file, a directory, or any other
+        launch-time ``OSError``) or exceeds ``timeout_s``.
         """
         argv = [self.path, *verb.split(), *args]
         if json:
@@ -197,6 +198,17 @@ class EngineClient:
                 message=f"neurosymbolic-engine timed out after {effective_timeout}s "
                 f"running '{verb}'",
                 remediation="the engine process may be wedged; retry or investigate it directly",
+            ) from None
+        except OSError as err:
+            # Any other process-launch failure — a non-executable file, a
+            # directory, a bad executable format — is the same class of
+            # problem as a missing binary from the caller's point of view:
+            # the environment isn't set up to run the engine. Name the
+            # underlying error rather than letting a traceback leak.
+            raise CliError(
+                code=EXIT_ENV_ERROR,
+                message=f"neurosymbolic-engine failed to start ({self.path}): {err}",
+                remediation=_BUILD_REMEDIATION,
             ) from None
 
         result: Any = None
