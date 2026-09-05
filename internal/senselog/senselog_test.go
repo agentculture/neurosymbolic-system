@@ -388,3 +388,63 @@ func TestStreakTickCountMatchesEnterCalls(t *testing.T) {
 		t.Fatalf("summary = %q, want it to contain suppressed %d ticks", summary, n)
 	}
 }
+
+// TestDetailCannotForgeAnExtraRecord pins that one call is one line.
+//
+// detail reaches this package from error strings, peer-supplied client names
+// and rule ids — none of which this package controls. A detail carrying a
+// newline plus a plausible "[SENSE ...]" prefix would otherwise appear to a
+// line-by-line consumer as a SECOND, fabricated record: exactly the failure
+// the one-record-per-line grammar exists to prevent.
+func TestDetailCannotForgeAnExtraRecord(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(&buf)
+	l.Stage("gate", "speech", "abc",
+		"first\n[SENSE stage=forged source=evil event=deadbeef] injected")
+
+	out := buf.String()
+	if strings.Count(out, "\n") != 1 {
+		t.Fatalf("one Stage call wrote %d lines, want 1: %q", strings.Count(out, "\n"), out)
+	}
+	line, err := Parse(out)
+	if err != nil {
+		t.Fatalf("Parse(%q): %v", out, err)
+	}
+	if line.Stage != "gate" {
+		t.Errorf("stage = %q, want %q", line.Stage, "gate")
+	}
+	if strings.Contains(line.Detail, "\n") {
+		t.Errorf("detail kept a newline: %q", line.Detail)
+	}
+	if !strings.Contains(line.Detail, "injected") {
+		t.Errorf("detail lost its content: %q", line.Detail)
+	}
+}
+
+// TestDropDetailIsSanitizedToo — Drop takes the same untrusted detail.
+func TestDropDetailIsSanitizedToo(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(&buf)
+	l.Drop("gate", "speech", "abc", "self-mute", "a\rb\nc\x00d")
+	out := buf.String()
+	if strings.Count(out, "\n") != 1 {
+		t.Fatalf("one Drop call wrote %d lines, want 1: %q", strings.Count(out, "\n"), out)
+	}
+	line, err := Parse(out)
+	if err != nil {
+		t.Fatalf("Parse(%q): %v", out, err)
+	}
+	if line.Detail != "a_b_c_d" {
+		t.Errorf("detail = %q, want %q", line.Detail, "a_b_c_d")
+	}
+}
+
+// TestParseRefusesAControlCharacter is the reader-side half: a line that
+// somehow carries a control character did not come out of this Logger, and
+// parsing it as a well-formed record would launder a forgery.
+func TestParseRefusesAControlCharacter(t *testing.T) {
+	forged := "[SENSE stage=gate source=speech event=abc] first\rsecond"
+	if _, err := Parse(forged); err == nil {
+		t.Fatal("Parse accepted a line with an embedded control character")
+	}
+}

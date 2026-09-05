@@ -29,6 +29,15 @@ const (
 func Parse(line string) (Line, error) {
 	line = strings.TrimRight(line, "\n")
 
+	// A control character cannot have come out of this package's Logger, which
+	// maps every one of them to '_' before writing. Accepting one here would
+	// launder a record a peer forged by smuggling a newline into a detail, so
+	// the reader refuses it for the same reason the writer removes it.
+	if i := strings.IndexFunc(line, isControl); i >= 0 {
+		return Line{}, fmt.Errorf(
+			"senselog: line carries a control character at byte %d: %q", i, line)
+	}
+
 	if !strings.HasPrefix(line, prefix) {
 		return Line{}, fmt.Errorf("senselog: line does not start with %q: %q", prefix, line)
 	}
