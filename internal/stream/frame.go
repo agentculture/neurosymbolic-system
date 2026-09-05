@@ -50,10 +50,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"reflect"
-	"strings"
-
-	"github.com/agentculture/neurosymbolic-system/internal/adaptor"
 )
 
 // Version is the wire protocol version every frame carries as "v".
@@ -83,17 +79,22 @@ const (
 
 // KindPose is the pose frame's kind token.
 //
-// It is DERIVED from adaptor.Pose's type name rather than spelled as a string
-// literal, and that is not decoration. "pose" is also the name of one of
-// MicroDuck's channels, so internal/adaptor's donor-literal guard fails the
-// build on any non-test source containing it as a whole string literal, and
-// that guard's exemption list refuses to exempt a channel name on any grounds.
-// The collision is accidental — this is a protocol schema token, identical on
-// every robot, not a robot name compiled into the engine — but the guard cannot
-// tell those apart and should not be loosened until it can. Deriving the token
-// from the library's own type is the honest way to spell it meanwhile;
-// TestPoseKindIsTheDeclaredWireToken pins the resulting value.
-var KindPose = strings.ToLower(reflect.TypeOf(adaptor.Pose{}).Name())
+// It used to be DERIVED from adaptor.Pose's type name rather than spelled,
+// because "pose" is also the name of one of MicroDuck's channels and
+// internal/adaptor's donor-literal guard fails the build on any non-test source
+// carrying a donor name as a whole string literal. That reflection was a
+// workaround for a guard which could not tell a protocol token from a robot
+// name, and its cost was that the wire's most-parsed token was the one thing a
+// reader could not grep for.
+//
+// The guard now has a second, deliberately narrow exemption list —
+// internal/adaptor/testdata/protocol_tokens.txt — carrying wire frame-kind
+// tokens ONLY, and refusing a channel or action name on any grounds. "pose" is
+// listed there with exactly that justification, so the token is spelled here as
+// what it is. TestPoseKindIsTheDeclaredWireToken still pins the value and
+// TestEveryCollidingFrameKindIsExempted pins that the exemption list stays in
+// step with the kinds this package declares.
+const KindPose = "pose"
 
 // The error codes an error frame carries. They are the CLI error contract's
 // codes, so a client relaying one as a process exit code needs no translation:

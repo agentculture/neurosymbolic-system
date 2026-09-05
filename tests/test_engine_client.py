@@ -145,10 +145,30 @@ def test_run_missing_binary_raises_missing_engine_error() -> None:
 
 
 @requires_built_engine
-def test_check_protocol_reports_absence_as_warning_without_failing() -> None:
-    # The real built binary does not emit `protocol` yet (a later task adds
-    # it) — do not fail on absence.
+def test_check_protocol_matches_the_built_engine() -> None:
+    # `version --json` carries `protocol` (t13, sourced from the Go side's
+    # stream.Version): the real binary and this client must agree, and a skew
+    # between them is exactly what this check exists to name.
     check = check_protocol(ENGINE_PATH)
+    assert check["id"] == "engine_protocol"
+    assert check["passed"] is True
+    assert check["severity"] == "warning"
+    assert f"expected {EXPECTED_PROTOCOL}" in check["message"]
+    assert "matches expected" in check["message"]
+
+
+def test_check_protocol_reports_absence_as_warning_without_failing(tmp_path: Path) -> None:
+    # An OLDER engine, built before `protocol` was reported, is not a failure:
+    # doctor warns rather than refusing to run against it.
+    fake = tmp_path / "neurosymbolic-engine"
+    _write_executable(
+        fake,
+        textwrap.dedent("""\
+            #!/bin/sh
+            echo '{"version":"0.1.0","revision":"deadbeef"}'
+            """),
+    )
+    check = check_protocol(str(fake))
     assert check["id"] == "engine_protocol"
     assert check["passed"] is True
     assert check["severity"] == "warning"

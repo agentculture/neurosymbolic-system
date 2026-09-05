@@ -1,12 +1,16 @@
 // Command neurosymbolic-engine is the Go entry point for the
 // neurosymbolic-system runtime.
 //
-// main.go is deliberately thin: it turns argv into an internal/mgmt.Request,
-// hands it to a mgmt.Handler, and writes back whatever the Handler already
-// rendered. Every verb's actual body — version, whoami, doctor, status, the
-// rules noun group — lives in internal/mgmt/verbs_*.go, so a future socket
-// front (the stream endpoint) can answer the identical set of requests
-// without duplicating a single verb.
+// main.go is deliberately thin, and stays thin in both directions:
+//
+//   - every ONE-SHOT verb (version, whoami, doctor, status, the rules noun
+//     group) becomes an internal/mgmt.Request handed to a mgmt.Handler, whose
+//     already-rendered Response is written back verbatim. The verb bodies live
+//     in internal/mgmt/verbs_*.go, so the stream endpoint's mgmt frames answer
+//     the identical set of requests without duplicating a single verb;
+//   - `run`, the long-lived one, goes straight to internal/compose, the
+//     composition root that knows how the runtime is wired. main.go learns
+//     nothing about engines, seams, sockets or signals.
 package main
 
 import (
@@ -14,6 +18,7 @@ import (
 	"os"
 
 	"github.com/agentculture/neurosymbolic-system/internal/clifmt"
+	"github.com/agentculture/neurosymbolic-system/internal/compose"
 	"github.com/agentculture/neurosymbolic-system/internal/mgmt"
 )
 
@@ -36,6 +41,7 @@ Usage:
   neurosymbolic-engine <command> [args...] [--json]
 
 Commands:
+  run [flags]             run the engine: senses in, poses out, on one tick
   version                 print the engine's version and revision
   whoami                  print the engine's version, revision and module path
   doctor                  run environment checks (toolchain, vendoring, ...)
@@ -44,6 +50,8 @@ Commands:
   rules list <file>...    list every rule's id, kind and predicate
   rules migrate <file>    write a schema_version-2 twin of a rules file
   rules reload <file>...  ask a live engine to re-read its rules files
+
+Run "neurosymbolic-engine run" with no flags for that command's own usage.
 `
 
 func main() {
@@ -62,7 +70,15 @@ func run(args []string, stdout, stderr *os.File) int {
 		return clifmt.ExitUser
 	}
 
-	verb, verbArgs, ok := parseVerb(rest)
+	// `run` is not a mgmt verb: it does not answer a question and return, it
+	// IS the engine. It owns the process until a signal stops it, so it takes
+	// its own flags and never passes through the Request/Response shape.
+	if rest[0] == compose.Verb {
+		return compose.Main(rest[1:], os.Stdin, stdout, stderr,
+			compose.Build{Version: version, Revision: revision})
+	}
+
+	verb, verbArgs, ok := mgmt.ParseVerb(rest)
 	if !ok {
 		fmt.Fprint(stderr, usageText)
 		return clifmt.ExitUser
@@ -78,20 +94,4 @@ func run(args []string, stdout, stderr *os.File) int {
 		fmt.Fprint(stderr, resp.Stderr)
 	}
 	return resp.Code
-}
-
-// parseVerb turns argv into an internal/mgmt Request's Verb/Args: the
-// "rules" noun group folds its sub-verb into a dot-separated name
-// ("rules check" -> "rules.check"), everything else is its own bare verb.
-// ok is false only when "rules" is given with no sub-verb at all, which has
-// no verb to dispatch — that is the one case main handles itself rather than
-// letting mgmt.Handler report "unknown command" for an empty string.
-func parseVerb(rest []string) (verb string, args []string, ok bool) {
-	if rest[0] == "rules" {
-		if len(rest) < 2 {
-			return "", nil, false
-		}
-		return "rules." + rest[1], rest[2:], true
-	}
-	return rest[0], rest[1:], true
 }

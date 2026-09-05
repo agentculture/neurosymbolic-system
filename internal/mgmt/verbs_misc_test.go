@@ -7,6 +7,7 @@ import (
 
 	"github.com/agentculture/neurosymbolic-system/internal/clifmt"
 	"github.com/agentculture/neurosymbolic-system/internal/mgmt"
+	"github.com/agentculture/neurosymbolic-system/internal/stream"
 )
 
 func TestVerbVersionText(t *testing.T) {
@@ -21,12 +22,33 @@ func TestVerbVersionText(t *testing.T) {
 func TestVerbVersionJSON(t *testing.T) {
 	h := testHandler()
 	resp := h.Handle(mgmt.Request{Verb: "version", JSON: true})
-	var decoded map[string]string
+	var decoded map[string]any
 	if err := json.Unmarshal([]byte(resp.Stdout), &decoded); err != nil {
 		t.Fatalf("invalid JSON %q: %v", resp.Stdout, err)
 	}
 	if decoded["version"] != "1.2.3" || decoded["revision"] != "abc1234" {
 		t.Fatalf("decoded = %+v", decoded)
+	}
+}
+
+// TestVerbVersionJSONCarriesTheProtocolVersion pins the field
+// neurosymbolic_system/engine_client.py's check_protocol reads (spec h35): a
+// client speaking a different wire version must be able to learn that BY NAME
+// from a one-shot exec, rather than by connecting and discovering that every
+// frame it sends comes back refused.
+func TestVerbVersionJSONCarriesTheProtocolVersion(t *testing.T) {
+	h := testHandler()
+	resp := h.Handle(mgmt.Request{Verb: "version", JSON: true})
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(resp.Stdout), &decoded); err != nil {
+		t.Fatalf("invalid JSON %q: %v", resp.Stdout, err)
+	}
+	protocol, ok := decoded["protocol"].(float64)
+	if !ok {
+		t.Fatalf("decoded = %+v, want a numeric \"protocol\" field", decoded)
+	}
+	if int(protocol) != stream.Version {
+		t.Errorf("protocol = %v, want stream.Version (%d)", protocol, stream.Version)
 	}
 }
 

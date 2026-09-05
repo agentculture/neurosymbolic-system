@@ -102,6 +102,35 @@ func (h *Handler) verbs() map[string]verbFunc {
 	}
 }
 
+// nounGroups are the verb names that take a sub-verb. A group's request is
+// dispatched under "<noun>.<sub-verb>"; ParseVerb is the ONE place that
+// folding happens, so the argv front and the stream endpoint's mgmt frames
+// cannot come to disagree about what "rules reload" means.
+func nounGroups() map[string]bool {
+	return map[string]bool{"rules": true}
+}
+
+// ParseVerb turns a caller's tokens into a Request's Verb and Args.
+//
+// A noun group folds its sub-verb into the dispatch key ("rules", "reload" ->
+// "rules.reload"); every other verb is its own bare name and the rest of the
+// tokens are its arguments. ok is false only for an empty token list, or for a
+// noun group given no sub-verb at all — neither has a verb to dispatch, and
+// reporting them as an unknown command named "" would be a worse message than
+// the caller's own usage text.
+func ParseVerb(tokens []string) (verb string, args []string, ok bool) {
+	if len(tokens) == 0 {
+		return "", nil, false
+	}
+	if nounGroups()[tokens[0]] {
+		if len(tokens) < 2 {
+			return "", nil, false
+		}
+		return tokens[0] + "." + tokens[1], tokens[2:], true
+	}
+	return tokens[0], tokens[1:], true
+}
+
 // verbNames is the sorted verb list, in the user-facing spelling ("rules
 // check", not the internal dispatch key "rules.check"), for an "unknown
 // command" remediation.

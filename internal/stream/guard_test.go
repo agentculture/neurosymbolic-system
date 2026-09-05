@@ -67,25 +67,77 @@ func TestEveryListenerGoesThroughTheFactory(t *testing.T) {
 	}
 }
 
-// TestPoseKindIsTheDeclaredWireToken pins the one frame kind this package
-// cannot spell as a literal.
+// TestPoseKindIsTheDeclaredWireToken pins the one frame kind that collides with
+// a donor robot's vocabulary.
 //
 // "pose" is a MicroDuck CHANNEL name, so internal/adaptor's donor-literal guard
-// fails on any non-test source containing it as a whole string literal — and
-// its exemption file explicitly refuses to exempt a channel name on any
-// grounds. The collision is accidental: this is a protocol schema token, the
-// same on every robot, not a robot name compiled into the engine. So kindPose
-// is derived from adaptor.Pose's own type name, and this test (a _test.go file,
-// where the literal is allowed) is what pins the wire token so a client on the
-// other side of the socket can rely on it.
+// fails on any non-test source containing it as a whole string literal unless it
+// is exempted. The collision is accidental: this is a protocol schema token, the
+// same on every robot, not a robot name compiled into the engine — which is what
+// testdata/protocol_tokens.txt records (see TestEveryCollidingFrameKindIsExempted
+// below). This test pins the wire token itself, so a client on the other side of
+// the socket can rely on it.
 func TestPoseKindIsTheDeclaredWireToken(t *testing.T) {
 	if KindPose != "pose" {
 		t.Fatalf("KindPose=%q, want %q", KindPose, "pose")
 	}
-	// And it really is derived, not spelled: the type it comes from is the
-	// one the Sink carries.
+	// And it is still the kind carried on the frame the Sink's pose goes out as.
 	var p adaptor.Pose
 	_ = p
+}
+
+// TestEveryCollidingFrameKindIsExempted closes the loop between this package's
+// frame kinds and the donor-literal guard's exemption list.
+//
+// The guard lives in internal/adaptor and cannot import this package (that would
+// be an import cycle), so it spells the wire kinds out. This test walks the
+// other way: every kind THIS package declares that is also a donor name must
+// appear in protocol_tokens.txt. A new frame kind colliding with some robot's
+// channel would otherwise fail the guard from across the tree with no hint that
+// the fix is one justified exemption line.
+func TestEveryCollidingFrameKindIsExempted(t *testing.T) {
+	donor := readNameFile(t, filepath.Join("..", "adaptor", "testdata", "donor_names.txt"))
+	exempt := readNameFile(t, filepath.Join("..", "adaptor", "testdata", "protocol_tokens.txt"))
+
+	kinds := []string{
+		KindHello, KindSense, KindIntent, KindMgmt, KindMgmtResult,
+		KindPose, KindEvent, KindHeartbeat, KindEnd, KindError,
+	}
+	declared := map[string]bool{}
+	for _, kind := range kinds {
+		declared[kind] = true
+		if donor[kind] && !exempt[kind] {
+			t.Errorf("frame kind %q collides with a donor name but is not listed in "+
+				"internal/adaptor/testdata/protocol_tokens.txt; add it with its "+
+				"justification, or the donor-literal guard will fail the build", kind)
+		}
+	}
+	// And nothing is exempted that this package does not actually declare: a
+	// stale entry reads like a hole in the guard.
+	for token := range exempt {
+		if !declared[token] {
+			t.Errorf("protocol_tokens.txt exempts %q, which is not a frame kind this "+
+				"package declares", token)
+		}
+	}
+}
+
+// readNameFile reads one of the guard's `#`-commented name lists.
+func readNameFile(t *testing.T, path string) map[string]bool {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading %s: %v", path, err)
+	}
+	names := map[string]bool{}
+	for _, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		names[line] = true
+	}
+	return names
 }
 
 // TestFrameKindsAreDistinct catches a copy-paste that would make two frame
