@@ -1,0 +1,728 @@
+{
+  "channels": [
+    {
+      "name": "head",
+      "arity": 6,
+      "neutral": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "antennas",
+      "arity": 2,
+      "neutral": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "body_yaw",
+      "arity": 1,
+      "neutral": [
+        0.0
+      ]
+    }
+  ],
+  "senses": [
+    {
+      "name": "doa",
+      "type": "float",
+      "age_field": "doa_age_s"
+    },
+    {
+      "name": "doa_age_s",
+      "type": "float"
+    },
+    {
+      "name": "speech",
+      "type": "bool"
+    },
+    {
+      "name": "rms",
+      "type": "float"
+    },
+    {
+      "name": "rms_ratio",
+      "type": "float"
+    },
+    {
+      "name": "pat",
+      "type": "bool"
+    },
+    {
+      "name": "face",
+      "type": "string",
+      "age_field": "face_age_s"
+    },
+    {
+      "name": "face_age_s",
+      "type": "float"
+    },
+    {
+      "name": "frame_available",
+      "type": "bool"
+    },
+    {
+      "name": "transcript",
+      "type": "string"
+    },
+    {
+      "name": "self_moving",
+      "type": "bool"
+    }
+  ],
+  "actions": [
+    {
+      "name": "feel-alive",
+      "claims": [
+        "head",
+        "antennas",
+        "body_yaw"
+      ],
+      "loops": true,
+      "trajectories": {
+        "head": {
+          "keyframes": [
+            {
+              "t": 0.0,
+              "value": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "t": 2.0,
+              "value": [
+                0.0,
+                0.0,
+                3.0,
+                0.0,
+                2.0,
+                0.0
+              ]
+            },
+            {
+              "t": 4.0,
+              "value": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        },
+        "antennas": {
+          "easing": {
+            "kind": "ease_in_out",
+            "from": [
+              0.0,
+              0.0
+            ],
+            "to": [
+              12.0,
+              -12.0
+            ],
+            "duration_s": 4.0
+          }
+        },
+        "body_yaw": {
+          "easing": {
+            "kind": "linear",
+            "from": [
+              0.0
+            ],
+            "to": [
+              2.0
+            ],
+            "duration_s": 4.0
+          }
+        }
+      },
+      "params": [
+        {
+          "name": "energy",
+          "min": 0.0,
+          "max": 4.0
+        },
+        {
+          "name": "antenna",
+          "min": 0.0,
+          "max": 45.0
+        }
+      ]
+    },
+    {
+      "name": "pet-reaction",
+      "claims": [
+        "head",
+        "antennas"
+      ],
+      "loops": false,
+      "trajectories": {
+        "head": {
+          "easing": {
+            "kind": "ease_in_out",
+            "from": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "to": [
+              0.0,
+              0.0,
+              -5.0,
+              0.0,
+              8.0,
+              0.0
+            ],
+            "duration_s": 1.2
+          }
+        },
+        "antennas": {
+          "easing": {
+            "kind": "ease_in_out",
+            "from": [
+              0.0,
+              0.0
+            ],
+            "to": [
+              20.0,
+              20.0
+            ],
+            "duration_s": 1.2
+          }
+        }
+      }
+    },
+    {
+      "name": "face-lock",
+      "claims": [
+        "head"
+      ],
+      "loops": true,
+      "trajectories": {
+        "head": {
+          "easing": {
+            "kind": "linear",
+            "from": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "to": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              15.0
+            ],
+            "duration_s": 0.8
+          }
+        }
+      },
+      "params": [
+        {
+          "name": "slew",
+          "min": 0.0,
+          "max": 1.0
+        }
+      ]
+    },
+    {
+      "name": "orient-to-sound",
+      "claims": [
+        "head",
+        "body_yaw"
+      ],
+      "loops": false,
+      "trajectories": {
+        "head": {
+          "easing": {
+            "kind": "ease_in_out",
+            "from": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "to": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              25.0
+            ],
+            "duration_s": 4.0
+          }
+        },
+        "body_yaw": {
+          "easing": {
+            "kind": "ease_in_out",
+            "from": [
+              0.0
+            ],
+            "to": [
+              20.0
+            ],
+            "duration_s": 4.0
+          }
+        }
+      },
+      "params": [
+        {
+          "name": "gain",
+          "min": 0.0,
+          "max": 2.0
+        },
+        {
+          "name": "deadband",
+          "min": 0.0,
+          "max": 90.0
+        },
+        {
+          "name": "hold",
+          "min": 0.0,
+          "max": 10.0
+        }
+      ]
+    },
+    {
+      "name": "gaze-hold",
+      "claims": [
+        "head"
+      ],
+      "loops": false,
+      "trajectories": {
+        "head": {
+          "easing": {
+            "kind": "ease_in_out",
+            "from": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "to": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              10.0,
+              18.0
+            ],
+            "duration_s": 0.6
+          }
+        }
+      },
+      "params": [
+        {
+          "name": "yaw",
+          "min": -60.0,
+          "max": 60.0
+        },
+        {
+          "name": "pitch",
+          "min": -30.0,
+          "max": 30.0
+        }
+      ]
+    },
+    {
+      "name": "look-at-sound",
+      "claims": [
+        "head"
+      ],
+      "loops": false,
+      "trajectories": {
+        "head": {
+          "easing": {
+            "kind": "ease_in_out",
+            "from": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "to": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              20.0
+            ],
+            "duration_s": 0.7
+          }
+        }
+      }
+    },
+    {
+      "name": "look-at-face",
+      "claims": [
+        "head"
+      ],
+      "loops": false,
+      "trajectories": {
+        "head": {
+          "easing": {
+            "kind": "ease_in_out",
+            "from": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "to": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              5.0,
+              10.0
+            ],
+            "duration_s": 0.7
+          }
+        }
+      }
+    },
+    {
+      "name": "nod",
+      "claims": [
+        "head"
+      ],
+      "loops": false,
+      "trajectories": {
+        "head": {
+          "keyframes": [
+            {
+              "t": 0.0,
+              "value": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "t": 0.4,
+              "value": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                -12.0,
+                0.0
+              ]
+            },
+            {
+              "t": 0.8,
+              "value": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        }
+      },
+      "params": [
+        {
+          "name": "amp",
+          "min": 0.0,
+          "max": 45.0
+        },
+        {
+          "name": "period",
+          "min": 0.1,
+          "max": 5.0
+        }
+      ]
+    },
+    {
+      "name": "shake",
+      "claims": [
+        "head"
+      ],
+      "loops": false,
+      "trajectories": {
+        "head": {
+          "keyframes": [
+            {
+              "t": 0.0,
+              "value": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "t": 0.35,
+              "value": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                -15.0
+              ]
+            },
+            {
+              "t": 0.7,
+              "value": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                15.0
+              ]
+            }
+          ]
+        }
+      },
+      "params": [
+        {
+          "name": "amp",
+          "min": 0.0,
+          "max": 45.0
+        },
+        {
+          "name": "period",
+          "min": 0.1,
+          "max": 5.0
+        }
+      ]
+    },
+    {
+      "name": "speak",
+      "claims": [
+        "head"
+      ],
+      "loops": true,
+      "trajectories": {
+        "head": {
+          "keyframes": [
+            {
+              "t": 0.0,
+              "value": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "t": 0.16,
+              "value": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                5.0,
+                3.0
+              ]
+            },
+            {
+              "t": 0.32,
+              "value": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        }
+      },
+      "params": [
+        {
+          "name": "pitch",
+          "min": 0.0,
+          "max": 30.0
+        },
+        {
+          "name": "yaw",
+          "min": 0.0,
+          "max": 30.0
+        },
+        {
+          "name": "period",
+          "min": 0.05,
+          "max": 5.0
+        }
+      ]
+    },
+    {
+      "name": "thoughtful",
+      "claims": [
+        "head",
+        "antennas"
+      ],
+      "loops": false,
+      "trajectories": {
+        "head": {
+          "easing": {
+            "kind": "ease_in_out",
+            "from": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "to": [
+              0.0,
+              0.0,
+              0.0,
+              5.0,
+              8.0,
+              10.0
+            ],
+            "duration_s": 0.6
+          }
+        },
+        "antennas": {
+          "easing": {
+            "kind": "ease_in_out",
+            "from": [
+              0.0,
+              0.0
+            ],
+            "to": [
+              -8.0,
+              8.0
+            ],
+            "duration_s": 0.6
+          }
+        }
+      },
+      "params": [
+        {
+          "name": "rise",
+          "min": 0.05,
+          "max": 5.0
+        }
+      ]
+    },
+    {
+      "name": "antenna-sway",
+      "claims": [
+        "antennas"
+      ],
+      "loops": true,
+      "trajectories": {
+        "antennas": {
+          "keyframes": [
+            {
+              "t": 0.0,
+              "value": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "t": 1.5,
+              "value": [
+                18.0,
+                -18.0
+              ]
+            },
+            {
+              "t": 3.0,
+              "value": [
+                0.0,
+                0.0
+              ]
+            }
+          ]
+        }
+      },
+      "params": [
+        {
+          "name": "amp",
+          "min": 0.0,
+          "max": 45.0
+        },
+        {
+          "name": "period",
+          "min": 0.1,
+          "max": 10.0
+        }
+      ]
+    },
+    {
+      "name": "body-turn-hold",
+      "claims": [
+        "body_yaw"
+      ],
+      "loops": false,
+      "trajectories": {
+        "body_yaw": {
+          "easing": {
+            "kind": "ease_in_out",
+            "from": [
+              0.0
+            ],
+            "to": [
+              20.0
+            ],
+            "duration_s": 0.5
+          }
+        }
+      },
+      "params": [
+        {
+          "name": "yaw",
+          "min": -90.0,
+          "max": 90.0
+        },
+        {
+          "name": "rise",
+          "min": 0.05,
+          "max": 5.0
+        }
+      ]
+    }
+  ]
+}
