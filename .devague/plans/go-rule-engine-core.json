@@ -5,7 +5,7 @@
   "schema_version": 5,
   "status": "exported",
   "created": "2026-09-05T05:19:16Z",
-  "updated": "2026-09-05T06:07:14Z",
+  "updated": "2026-09-05T06:18:00Z",
   "targets": [
     {
       "id": "c1",
@@ -865,8 +865,8 @@
       "text": "Event-keyed rules: whether priority/urgency feed arbitration or are routing metadata only is undecided (frame hard question q2); t6 implements them as routing metadata plus a one-tick sense field, which is reversible",
       "kind": "unknown_nonblocking",
       "task_id": "t6",
-      "resolved": false,
-      "resolution": ""
+      "resolved": true,
+      "resolution": "Implemented as routing metadata plus a one-tick sense field (t6 Router.TickFields); priority/urgency never feed arbitration. Reversible: an arbitration input would be a later schema field."
     },
     {
       "id": "r2",
