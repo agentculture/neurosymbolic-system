@@ -55,13 +55,16 @@ func LoadFile(path string, vocab Vocabulary) (*Config, error) {
 }
 
 // layerResult is one layer's contribution: its rules in order, its tombstoned
-// ids, and its modes.
+// ids, its modes, and its events.
 type layerResult struct {
-	ordered       []Rule
-	disabled      map[string]bool
-	modes         map[string]map[string]float64
-	activeMode    string
-	schemaVersion int
+	ordered        []Rule
+	disabled       map[string]bool
+	modes          map[string]map[string]float64
+	activeMode     string
+	schemaVersion  int
+	events         []Event
+	eventsDisabled map[string]bool
+	eventDefault   *EventDefault
 }
 
 func loadLayer(paths []string, vocab Vocabulary) (*layerResult, error) {
@@ -69,12 +72,15 @@ func loadLayer(paths []string, vocab Vocabulary) (*layerResult, error) {
 		return nil, nil
 	}
 	layer := &layerResult{
-		disabled: map[string]bool{},
-		modes:    map[string]map[string]float64{},
+		disabled:       map[string]bool{},
+		modes:          map[string]map[string]float64{},
+		eventsDisabled: map[string]bool{},
 	}
 	// Where each id was first seen in THIS layer, so a collision can name both
-	// files rather than only the second one.
+	// files rather than only the second one. Rules and events use separate
+	// namespaces — a rule id and an event "source/type" never collide.
 	origin := map[string]string{}
+	eventOrigin := map[string]string{}
 
 	for _, path := range paths {
 		f, err := parseFile(path)
@@ -94,6 +100,16 @@ func loadLayer(paths []string, vocab Vocabulary) (*layerResult, error) {
 			}
 			origin[id] = path
 		}
+		for _, id := range append(eventIDs(f.events), f.eventDisabled...) {
+			if first, clash := eventOrigin[id]; clash {
+				return nil, (ctx{path: path}).event(id).errf(
+					"rename one of them, or move one into a higher layer to override the other",
+					"duplicate event across two files of the same layer: also defined in %s",
+					first,
+				)
+			}
+			eventOrigin[id] = path
+		}
 		layer.ordered = append(layer.ordered, f.ordered...)
 		for _, id := range f.disabled {
 			layer.disabled[id] = true
@@ -105,6 +121,13 @@ func loadLayer(paths []string, vocab Vocabulary) (*layerResult, error) {
 			layer.activeMode = f.activeMode
 		}
 		layer.schemaVersion = f.schemaVersion
+		layer.events = append(layer.events, f.events...)
+		for _, id := range f.eventDisabled {
+			layer.eventsDisabled[id] = true
+		}
+		if f.eventDefault != nil {
+			layer.eventDefault = f.eventDefault
+		}
 	}
 	return layer, nil
 }
@@ -185,12 +208,60 @@ func mergeLayers(base, overlay *layerResult) *layerResult {
 		}
 	}
 
+	eventsDisabled := map[string]bool{}
+	for id := range base.eventsDisabled {
+		eventsDisabled[id] = true
+	}
+	for id := range overlay.eventsDisabled {
+		eventsDisabled[id] = true
+	}
+
+	overlayEventByID := make(map[string]Event, len(overlay.events))
+	for _, event := range overlay.events {
+		overlayEventByID[event.ID()] = event
+	}
+
+	var events []Event
+	seenEvents := map[string]bool{}
+	for _, event := range append(append([]Event{}, base.events...), overlay.events...) {
+		id := event.ID()
+		if seenEvents[id] {
+			continue
+		}
+		seenEvents[id] = true
+		winner := event
+		if replacement, ok := overlayEventByID[id]; ok {
+			winner = replacement
+		}
+		if eventsDisabled[id] {
+			if _, revived := overlayEventByID[id]; !revived {
+				continue
+			}
+		}
+		events = append(events, winner)
+	}
+
+	remainingEvents := map[string]bool{}
+	for id := range eventsDisabled {
+		if _, revived := overlayEventByID[id]; !revived {
+			remainingEvents[id] = true
+		}
+	}
+
+	eventDefault := base.eventDefault
+	if overlay.eventDefault != nil {
+		eventDefault = overlay.eventDefault
+	}
+
 	return &layerResult{
-		ordered:       ordered,
-		disabled:      remaining,
-		modes:         modes,
-		activeMode:    activeMode,
-		schemaVersion: schemaVersion,
+		ordered:        ordered,
+		disabled:       remaining,
+		modes:          modes,
+		activeMode:     activeMode,
+		schemaVersion:  schemaVersion,
+		events:         events,
+		eventsDisabled: remainingEvents,
+		eventDefault:   eventDefault,
 	}
 }
 
@@ -204,6 +275,8 @@ func (l *layerResult) config() *Config {
 		SchemaVersion: l.schemaVersion,
 		ActiveMode:    l.activeMode,
 		Modes:         l.modes,
+		Events:        l.events,
+		EventDefault:  l.eventDefault,
 	}
 	if cfg.Modes == nil {
 		cfg.Modes = map[string]map[string]float64{}
