@@ -95,6 +95,7 @@ func (h *Handler) verbs() map[string]verbFunc {
 		"whoami":        verbWhoami,
 		"doctor":        verbDoctor,
 		"status":        verbStatus,
+		"bench":         verbBench,
 		"rules.check":   verbRulesCheck,
 		"rules.list":    verbRulesList,
 		"rules.migrate": verbRulesMigrate,
