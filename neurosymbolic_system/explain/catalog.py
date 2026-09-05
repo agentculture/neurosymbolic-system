@@ -164,6 +164,186 @@ remediation. `overview` is descriptive and never touches the binary.
     neurosymbolic-system rules reload rules.toml
 """
 
+_ENGINE_STATUS = """\
+# neurosymbolic-system engine status
+
+Delegates to `neurosymbolic-engine status`: reports the live engine's
+current state. Needs an engine actually running — with none reachable, the
+binary's own error body is relayed verbatim (see `engine_client.EngineClient.run`).
+
+## Usage
+
+    neurosymbolic-system engine status
+    neurosymbolic-system engine status --json
+
+## Flags
+
+- `--json` — emit structured JSON instead of text.
+
+## Exit codes
+
+- `0` — the engine answered with its status.
+- `2` — `neurosymbolic-engine` is not locatable (`NEUROSYMBOLIC_ENGINE`/`PATH`),
+  or the running binary itself raised an environment-class error (e.g. "no
+  live engine") — relayed verbatim either way.
+- `1` (or another code the binary reports) — the engine's own non-environment
+  failure, relayed verbatim.
+"""
+
+_ENGINE_VERSION = """\
+# neurosymbolic-system engine version
+
+Delegates to `neurosymbolic-engine version`: prints the engine binary's
+version, revision, and (spec h35) its `protocol` field, used by
+`neurosymbolic-system doctor`'s `engine_protocol` check to detect a
+client/engine skew. No live engine process is required — this is a one-shot
+exec of the binary itself.
+
+## Usage
+
+    neurosymbolic-system engine version
+    neurosymbolic-system engine version --json
+
+## Flags
+
+- `--json` — emit structured JSON instead of text.
+
+## Exit codes
+
+- `0` — the binary reported its version.
+- `2` — `neurosymbolic-engine` is not locatable, relayed as an environment
+  error naming the `go build` remediation.
+"""
+
+_ENGINE_DOCTOR = """\
+# neurosymbolic-system engine doctor
+
+Delegates to `neurosymbolic-engine doctor`: the engine binary's own
+environment checks. Distinct from `neurosymbolic-system doctor`, which runs
+the Python-side agent-identity checks plus `engine_present`/`engine_protocol`
+checks *against* this same binary rather than asking it to check itself.
+
+## Usage
+
+    neurosymbolic-system engine doctor
+    neurosymbolic-system engine doctor --json
+
+## Flags
+
+- `--json` — emit structured JSON instead of text.
+
+## Exit codes
+
+- `0` — the engine binary reports itself healthy.
+- `2` — `neurosymbolic-engine` is not locatable, relayed as an environment
+  error naming the `go build` remediation.
+- `1` (or another code the binary reports) — the engine's own unhealthy
+  verdict, relayed verbatim.
+"""
+
+_RULES_CHECK = """\
+# neurosymbolic-system rules check
+
+Delegates to `neurosymbolic-engine rules check`: validates one or more rules
+files, loaded together as a single layer, with no robot attached.
+
+## Usage
+
+    neurosymbolic-system rules check rules.toml [more.toml ...] [--adaptor adaptor.json]
+    neurosymbolic-system rules check rules.toml --json
+
+## Flags
+
+- `files` (positional, one or more, required) — rules file(s) to load as one layer.
+- `--adaptor PATH` — a `.json`/`.toml` adaptor config attaching a vocabulary.
+- `--json` — emit structured JSON instead of text.
+
+## Exit codes
+
+- `0` — the rules files validated.
+- `2` — `neurosymbolic-engine` is not locatable, relayed as an environment error.
+- `1` (or another code the binary reports) — the engine's own validation
+  failure (e.g. a `schema_version` mismatch), relayed verbatim.
+"""
+
+_RULES_LIST = """\
+# neurosymbolic-system rules list
+
+Delegates to `neurosymbolic-engine rules list`: lists every rule's id, kind
+and predicate for the given file(s), loaded together as one layer.
+
+## Usage
+
+    neurosymbolic-system rules list rules.toml [more.toml ...] [--adaptor adaptor.json]
+    neurosymbolic-system rules list rules.toml --json
+
+## Flags
+
+- `files` (positional, one or more, required) — rules file(s) to load as one layer.
+- `--adaptor PATH` — a `.json`/`.toml` adaptor config attaching a vocabulary.
+- `--json` — emit structured JSON instead of text.
+
+## Exit codes
+
+- `0` — the file(s) loaded and their rules are listed.
+- `2` — `neurosymbolic-engine` is not locatable, relayed as an environment error.
+- `1` (or another code the binary reports) — the engine's own load/parse
+  failure, relayed verbatim.
+"""
+
+_RULES_MIGRATE = """\
+# neurosymbolic-system rules migrate
+
+Delegates to `neurosymbolic-engine rules migrate`: writes a
+`schema_version`-2 twin of a `schema_version`-1 rules file, leaving the
+original untouched.
+
+## Usage
+
+    neurosymbolic-system rules migrate rules.toml [--out rules.v2.toml] [--force]
+    neurosymbolic-system rules migrate rules.toml --json
+
+## Flags
+
+- `file` (positional, required) — the input rules file (`schema_version` 1).
+- `--out PATH` — output path (default: `<name>.v2.<ext>`).
+- `--force` — overwrite an existing `--out` path.
+- `--json` — emit structured JSON instead of text.
+
+## Exit codes
+
+- `0` — the migrated twin was written.
+- `2` — `neurosymbolic-engine` is not locatable, relayed as an environment error.
+- `1` (or another code the binary reports) — the engine's own refusal (e.g.
+  an existing `--out` without `--force`), relayed verbatim.
+"""
+
+_RULES_RELOAD = """\
+# neurosymbolic-system rules reload
+
+Delegates to `neurosymbolic-engine rules reload`: asks a *live* engine
+process to re-read the given rules file(s) — distinct from `rules check`,
+which only validates without a running engine.
+
+## Usage
+
+    neurosymbolic-system rules reload rules.toml [more.toml ...]
+    neurosymbolic-system rules reload rules.toml --json
+
+## Flags
+
+- `files` (positional, one or more, required) — rules file(s) the live engine should re-read.
+- `--json` — emit structured JSON instead of text.
+
+## Exit codes
+
+- `0` — the live engine reloaded its rules.
+- `2` — `neurosymbolic-engine` is not locatable, or the engine itself raised an
+  environment-class error (e.g. no live engine), relayed verbatim either way.
+- `1` (or another code the binary reports) — the engine's own reload failure
+  (e.g. invalid rules), relayed verbatim.
+"""
+
 
 ENTRIES: dict[tuple[str, ...], str] = {
     (): _ROOT,
@@ -177,6 +357,13 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("cli", "overview"): _CLI,
     ("engine",): _ENGINE,
     ("engine", "overview"): _ENGINE,
+    ("engine", "status"): _ENGINE_STATUS,
+    ("engine", "version"): _ENGINE_VERSION,
+    ("engine", "doctor"): _ENGINE_DOCTOR,
     ("rules",): _RULES,
     ("rules", "overview"): _RULES,
+    ("rules", "check"): _RULES_CHECK,
+    ("rules", "list"): _RULES_LIST,
+    ("rules", "migrate"): _RULES_MIGRATE,
+    ("rules", "reload"): _RULES_RELOAD,
 }
