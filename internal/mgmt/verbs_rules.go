@@ -82,19 +82,14 @@ func verbRulesCheck(_ *Handler, args []string) (verbResult, error) {
 		return verbResult{}, rulesError(err)
 	}
 
-	// Event-keyed entries (internal/events, t6) do not exist in this
-	// checkout yet; the count is reported as 0 until that dialect lands
-	// beside react/inhibit in the same Config, so the summary line's shape
-	// never has to change when it does.
-	const eventEntries = 0
 	summary := fmt.Sprintf("rules: %d react, %d inhibit, %d event entries, schema_version %d",
-		len(cfg.React), len(cfg.Inhibit), eventEntries, cfg.SchemaVersion)
+		len(cfg.React), len(cfg.Inhibit), len(cfg.Events), cfg.SchemaVersion)
 	return verbResult{
 		Text: summary,
 		Value: map[string]any{
 			"react":          len(cfg.React),
 			"inhibit":        len(cfg.Inhibit),
-			"event_entries":  eventEntries,
+			"event_entries":  len(cfg.Events),
 			"schema_version": cfg.SchemaVersion,
 		},
 	}, nil
@@ -124,12 +119,15 @@ func predicateSummary(p rules.Predicate) string {
 type ruleListing struct {
 	ID        string `json:"id"`
 	Kind      string `json:"kind"`
-	Predicate string `json:"predicate"`
+	Predicate string `json:"predicate,omitempty"`
+	Priority  string `json:"priority,omitempty"`
+	Urgency   string `json:"urgency,omitempty"`
 }
 
 // verbRulesList is `rules list <file>... [--adaptor <path>]`: print each
-// rule's id, kind and predicate summary, react rules first then inhibit, in
-// the merged file order rules.Load produces.
+// rule's id, kind and predicate summary, react rules first then inhibit,
+// then every [[event]] entry as `event <source>/<type> priority=<p>
+// urgency=<u>` — in the merged file order rules.Load produces.
 func verbRulesList(_ *Handler, args []string) (verbResult, error) {
 	adaptorPath, _, files := extractStringFlag(args, "adaptor")
 	if bad, found := rejectUnknownFlags(files); found {
@@ -157,6 +155,12 @@ func verbRulesList(_ *Handler, args []string) (verbResult, error) {
 	for _, r := range append(append([]rules.Rule{}, cfg.React...), cfg.Inhibit...) {
 		listings = append(listings, ruleListing{ID: r.ID, Kind: r.Kind, Predicate: predicateSummary(r.When)})
 		lines = append(lines, fmt.Sprintf("%s %s %s", r.ID, r.Kind, predicateSummary(r.When)))
+	}
+	for _, e := range cfg.Events {
+		listings = append(listings, ruleListing{
+			ID: e.ID(), Kind: "event", Priority: e.Priority, Urgency: e.Urgency,
+		})
+		lines = append(lines, fmt.Sprintf("event %s priority=%s urgency=%s", e.ID(), e.Priority, e.Urgency))
 	}
 	text := "(no rules)"
 	if len(lines) > 0 {

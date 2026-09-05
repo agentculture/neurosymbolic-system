@@ -16,6 +16,7 @@ const (
 	reachyRulesBroken = "../rules/testdata/reachy/default_rules.toml" // missing schema_version
 	reachyVocabJSON   = "../adaptor/testdata/reachy_vocabulary.json"
 	reachyVocabTOML   = "../adaptor/testdata/reachy_vocabulary.toml"
+	rulesWithEvents   = "testdata/with_events.toml"
 )
 
 func TestVerbRulesCheckSuccessSummary(t *testing.T) {
@@ -27,6 +28,55 @@ func TestVerbRulesCheckSuccessSummary(t *testing.T) {
 	want := "rules: 3 react, 0 inhibit, 0 event entries, schema_version 1\n"
 	if resp.Stdout != want {
 		t.Fatalf("Stdout = %q, want %q", resp.Stdout, want)
+	}
+}
+
+func TestVerbRulesCheckCountsEventEntries(t *testing.T) {
+	h := testHandler()
+	resp := h.Handle(mgmt.Request{Verb: "rules.check", Args: []string{rulesWithEvents}})
+	if resp.Code != clifmt.ExitSuccess {
+		t.Fatalf("Code = %d, want %d (stderr=%q)", resp.Code, clifmt.ExitSuccess, resp.Stderr)
+	}
+	want := "rules: 1 react, 0 inhibit, 2 event entries, schema_version 1\n"
+	if resp.Stdout != want {
+		t.Fatalf("Stdout = %q, want %q", resp.Stdout, want)
+	}
+}
+
+func TestVerbRulesListShowsEventEntries(t *testing.T) {
+	h := testHandler()
+	resp := h.Handle(mgmt.Request{Verb: "rules.list", Args: []string{rulesWithEvents}})
+	if resp.Code != clifmt.ExitSuccess {
+		t.Fatalf("Code = %d, want %d (stderr=%q)", resp.Code, clifmt.ExitSuccess, resp.Stderr)
+	}
+	for _, want := range []string{
+		"sample-react",
+		"event tracking/face_seen priority=NORMAL urgency=DEFERRABLE",
+		"event rule/fire priority=HIGH urgency=NOW",
+	} {
+		if !strings.Contains(resp.Stdout, want) {
+			t.Errorf("Stdout = %q, missing %q", resp.Stdout, want)
+		}
+	}
+}
+
+func TestVerbRulesListJSONIncludesEventEntries(t *testing.T) {
+	h := testHandler()
+	resp := h.Handle(mgmt.Request{Verb: "rules.list", Args: []string{rulesWithEvents}, JSON: true})
+	if resp.Code != clifmt.ExitSuccess {
+		t.Fatalf("Code = %d, want %d (stderr=%q)", resp.Code, clifmt.ExitSuccess, resp.Stderr)
+	}
+	var decoded []map[string]string
+	if err := json.Unmarshal([]byte(resp.Stdout), &decoded); err != nil {
+		t.Fatalf("invalid JSON %q: %v", resp.Stdout, err)
+	}
+	if len(decoded) != 3 {
+		t.Fatalf("decoded = %+v, want 3 entries (1 rule + 2 events)", decoded)
+	}
+	event := decoded[1]
+	if event["id"] != "tracking/face_seen" || event["kind"] != "event" ||
+		event["priority"] != "NORMAL" || event["urgency"] != "DEFERRABLE" {
+		t.Errorf("decoded[1] = %+v", event)
 	}
 }
 
