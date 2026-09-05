@@ -158,6 +158,7 @@ var allowedFamilies = map[string]bool{
 	"time":      true,
 	"unicode":   true,
 	"unique":    true,
+	"weak":      true,
 	"unsafe":    true,
 	"internal":  true,
 	"vendor":    true,
@@ -180,7 +181,14 @@ func TestImportAllowlist(t *testing.T) {
 
 	allowlist := parseAllowlist(t, string(goModText))
 
-	// Run go list -deps.
+	// Run go list -deps, WITH CGO_ENABLED=0 — the way this binary is actually
+	// built, in CI and on a bare box alike. That is not a detail: with cgo on,
+	// `net` (which the stream endpoint needs, and which entered the cmd graph
+	// when `version` started reporting the wire protocol version) drags in
+	// runtime/cgo, which this test denies precisely because a cgo-linked engine
+	// is not the statically linked artifact a robot gets deployed. Listing the
+	// graph the way the graph is built is what makes the denial mean what it
+	// says.
 	root := moduleRoot(t)
 	cmd := exec.Command(
 		"go",
@@ -190,6 +198,7 @@ func TestImportAllowlist(t *testing.T) {
 		"./cmd/neurosymbolic-engine",
 	)
 	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
