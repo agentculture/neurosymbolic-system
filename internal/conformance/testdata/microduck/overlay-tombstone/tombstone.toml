@@ -1,0 +1,7 @@
+# A tombstone: `id` is the only field it needs.
+
+schema_version = 1
+
+[[react]]
+id = "stop-when-limp"
+enabled = false

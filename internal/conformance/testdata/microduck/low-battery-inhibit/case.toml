@@ -1,0 +1,15 @@
+# microduck / low-battery-inhibit — back off before the pack cuts power.
+#
+# Donor: microduck_cli/behavior/default_rules.toml's `low-battery-inhibit`,
+# whose 0.15 threshold is upstream `robotctl monitor`'s own
+# `BATTERY_CRITICAL_PCT = 15.0`; tests/test_default_rules.py pins the rule's
+# fields and tests/test_rule_engine.py's `LOW_BATTERY` fixture is the same
+# predicate shape one threshold higher.
+#
+# The distinguishing evidence against the fallen case beside it is the
+# `disable` list carried on the fire event: `do`, `idle`, `mode`, `move` —
+# `look` and `sound` stay enabled, because refusing them buys nothing.
+period_ms = 20
+ticks = 12
+base_action = "idle"
+rule_layers = ["default_rules.toml", "overlay.toml"]

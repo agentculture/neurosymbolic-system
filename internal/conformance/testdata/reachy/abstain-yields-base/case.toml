@@ -1,0 +1,23 @@
+# reachy / abstain-yields-base — a claimant with nothing to say YIELDS its
+# channels to the passive base layer instead of freezing them.
+#
+# Donor: reachy/behavior/library.py's `orient-to-sound` and the arbitration
+# note in reachy-mini-cli's default_rules.toml — "with no credible sound
+# `orient-to-sound` ABSTAINS rather than freezing, so `feel-alive` keeps
+# breathing through it and the head never moves."
+#
+# This case is NOT rules-driven, and it cannot be: a vocabulary must give every
+# claimed channel a trajectory, so an action described purely as data can never
+# decline one. The abstaining claimant is therefore preadmitted by the harness
+# with its own contribution function — the shape of the donor's `wants_sense`
+# library entries, and the shape a consumer CLI uses. See the verification doc.
+period_ms = 250
+ticks = 6
+base_action = "feel-alive"
+
+[[preadmit]]
+name = "orient-to-sound"
+action = "orient-to-sound"
+class = "stoppable"
+loops = true
+abstain_unless_field = "doa_angle"

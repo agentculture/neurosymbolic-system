@@ -1,0 +1,5 @@
+// A bearing, then none, then a bearing again. With no bearing the claimant
+// abstains and every channel falls through to `feel-alive`.
+{"tick": 1, "fields": {"doa_angle": 30.0}}
+{"tick": 3, "fields": {"doa_angle": null}}
+{"tick": 5, "fields": {"doa_angle": -20.0}}

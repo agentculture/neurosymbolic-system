@@ -1,0 +1,3 @@
+// A healthy pack, driving; then a pack under upstream's own critical line.
+{"tick": 1, "fields": {"pad_active": true, "battery_frac": 0.5}}
+{"tick": 6, "fields": {"battery_frac": 0.1}}
