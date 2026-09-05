@@ -396,8 +396,16 @@ func (s *session) handleHello(body []byte) bool {
 				Version, KindHello), ""))
 		return false
 	}
+	if len(in.Client) > maxClientNameBytes {
+		_ = s.send(newError(CodeUser, fmt.Sprintf(
+			"a hello frame declares a %d-byte client name", len(in.Client)),
+			fmt.Sprintf("send a client name of at most %d bytes; an over-long name is "+
+				"refused rather than shortened, because a name this endpoint cut down is "+
+				"a name the client never sent", maxClientNameBytes), ""))
+		return false
+	}
 	s.greeted = true
-	s.srv.note("hello", KindHello, "a client attached: "+sanitizeClient(in.Client))
+	s.srv.note("hello", KindHello, "a client attached: "+clientLabel(in.Client))
 	body, err := encodeFrame(helloOut{
 		V: Version, Kind: KindHello, EngineVersion: s.srv.cfg.EngineVersion,
 	})
@@ -424,12 +432,22 @@ func (s *session) handleHello(body []byte) bool {
 	return true
 }
 
-func sanitizeClient(name string) string {
+// maxClientNameBytes bounds the hello frame's client name.
+//
+// It is a REFUSAL boundary, not a truncation point. The name's only job is to
+// tell an operator WHICH client attached, and a name the endpoint shortened is
+// a name the client never sent: two clients sharing a 64-byte prefix collapse
+// into one entry in the log, which is worse than no name at all. Refusing keeps
+// the rule this runtime applies to an out-of-range axis, an over-long say and
+// an unknown field — refused, never reinterpreted — and a peer told its name is
+// too long can send a shorter one.
+const maxClientNameBytes = 64
+
+// clientLabel is the log label for an ACCEPTED client name. It never alters the
+// supplied value; an over-long one is refused in handleHello, before this.
+func clientLabel(name string) string {
 	if name == "" {
 		return "(unnamed)"
-	}
-	if len(name) > 64 {
-		return name[:64]
 	}
 	return name
 }

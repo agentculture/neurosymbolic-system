@@ -10,6 +10,7 @@ import (
 	"go/token"
 	"io"
 	"math"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -398,5 +399,70 @@ func TestAnUnknownFieldIsRefusedOnEveryInboundKind(t *testing.T) {
 				t.Errorf("the refused sense frame still reached the sink: %v", r.sense.all())
 			}
 		})
+	}
+}
+
+// --- finding 3: an over-long client name is refused, never truncated --------
+
+// TestAnOverLongClientNameIsRefusedNotTruncated.
+//
+// sanitizeClient used to cut a hello's client name to 64 bytes and carry on, so
+// the name in the log — the operator's only record of WHICH client attached —
+// was a value the client never sent. Two clients whose names share a 64-byte
+// prefix became indistinguishable. This runtime refuses rather than
+// reinterprets everywhere else (an out-of-range axis, a `say` over MaxSayChars,
+// an unknown field); a name is no different, and a peer that learns its name is
+// too long can send a shorter one.
+func TestAnOverLongClientNameIsRefusedNotTruncated(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	r := newRig(t, nil, nil)
+	r.start(ctx)
+
+	client, conn := r.dial()
+	long := strings.Repeat("n", maxClientNameBytes+1)
+	client.send(map[string]any{"v": Version, "kind": KindHello, "client": long})
+
+	frame := client.recvKind(KindError)
+	if code, _ := frame["code"].(float64); int(code) != CodeUser {
+		t.Errorf("the refusal carries code %v, want %d", frame["code"], CodeUser)
+	}
+	remediation, _ := frame["remediation"].(string)
+	if !strings.Contains(remediation, strconv.Itoa(maxClientNameBytes)) {
+		t.Errorf("the remediation %q does not name the %d-byte limit",
+			remediation, maxClientNameBytes)
+	}
+	// The connection is closed: the handshake was refused, so there is no
+	// session to send anything else on.
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, err := conn.Read(make([]byte, 1)); err == nil {
+		t.Error("the connection stayed open after a refused handshake")
+	}
+	// And no truncated name reached the log.
+	if strings.Contains(r.logText(), strings.Repeat("n", maxClientNameBytes)) {
+		t.Errorf("a truncated client name was logged:\n%s", r.logText())
+	}
+}
+
+// A name AT the limit is still accepted, verbatim.
+func TestAClientNameAtTheLimitIsAcceptedVerbatim(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	r := newRig(t, nil, nil)
+	r.start(ctx)
+
+	client, _ := r.dial()
+	name := strings.Repeat("n", maxClientNameBytes)
+	client.send(map[string]any{"v": Version, "kind": KindHello, "client": name})
+	if reply := client.recv(); reply["kind"] != KindHello {
+		t.Fatalf("a name at the limit was refused: %+v", reply)
+	}
+	deadline := time.After(2 * time.Second)
+	for !strings.Contains(r.logText(), name) {
+		select {
+		case <-deadline:
+			t.Fatalf("the client name was not logged verbatim:\n%s", r.logText())
+		case <-time.After(5 * time.Millisecond):
+		}
 	}
 }
