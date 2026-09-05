@@ -311,6 +311,23 @@ above its three base deps is the model.
   read-only in a throwaway worktree, so the reflex is always safe.
   `write --apply` / `write --pr` still needs the user's go-ahead. Its output is
   a second opinion to verify and own, never authority.
+- **Spec work goes through the devague chain** — `scope` → `think` →
+  `challenge` → `spec-to-plan` → `assign-to-workforce` → `validate-delivery` →
+  `summarize-delivery`, with `deviate` as the mid-run escape hatch. All eight
+  are vendored directly from `../devague` (see `docs/skill-sources.md`).
+- **Obligations are planted early and proven late.** On the think leg,
+  `devague oblige <cN> --seam <seam> --behavior <behavior>` ties a claim to a
+  checkable seam; on the plan leg, `devague plan oblige <tN> --criterion N …`
+  does the same for an acceptance criterion. After a wave merges
+  (`validate-delivery`), run the behavioral tests agent-side and file one
+  `devague evidence` record per obligation — the verbatim `pass`/`fail`
+  outcome, and a strength (coverage / fidelity / execution / sensitivity) no
+  higher than the check you actually ran — plus a `devague delta` for anything
+  the run added, amended, or removed relative to the plan. LLM-origin
+  obligations, evidence and deltas land `proposed`; never self-confirm. An
+  obligation with no approved evidence is a convergence *warning*, never a
+  blocker — the fix is real evidence, not silencing it. `devague today` then
+  projects the ledger into `docs/current-spec.md`.
 - **Vendored `.claude/skills/` are cited verbatim** — do not reformat their
   scripts; re-sync from guildmaster and record any deliberate local divergence in
   `docs/skill-sources.md`. (The `cicd` and `communicate` skills carry
