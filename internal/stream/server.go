@@ -48,6 +48,11 @@ const flushGrace = 100 * time.Millisecond
 // long enough that the polling costs nothing measurable.
 const flushPollEvery = time.Millisecond
 
+// reasonStdinClosed is the end frame's reason when a stdio peer closed the
+// pipe. It is a variable only because endReason holds a pointer; treat it as a
+// constant of the wire, since a consumer greps for it.
+var reasonStdinClosed = "stdin-closed"
+
 // Stats is the endpoint's cumulative accounting, readable from any goroutine.
 type Stats struct {
 	// FramesIn counts inbound frames that were read and dispatched.
@@ -94,6 +99,13 @@ type Server struct {
 	// logMu serializes senselog writes: the tick goroutine, a reader
 	// goroutine and a management goroutine can all reach the same io.Writer.
 	logMu sync.Mutex
+
+	// stdinClosed is closed once a STDIO session's reader ends; endReason
+	// records why the stream is ending when the ENDPOINT learns it before the
+	// engine does. Both are nil/unset for a socket server.
+	stdinClosed chan struct{}
+	stdinOnce   sync.Once
+	endReason   atomic.Pointer[string]
 
 	// lastBeat is owned by the goroutine calling Seam — the tick goroutine.
 	lastBeat time.Time
@@ -149,6 +161,7 @@ func newServer(cfg Config, eng *tick.Engine, sense SenseSink, mgmt MgmtHandler,
 		stdio: stdio, stdioIn: r, stdioOut: w,
 	}
 	if stdio {
+		s.stdinClosed = make(chan struct{})
 		// A stdio endpoint has exactly one peer and it is known at
 		// construction, so its session exists from the start rather than from
 		// Serve. That is not a convenience: a pose written between construction
@@ -335,8 +348,8 @@ func (s *Server) handleConn(conn net.Conn) {
 	sess.start()
 }
 
-// detach clears the session when its reader ends, freeing the socket for the
-// next owner. It does not emit an end frame: the peer is the one that left.
+// detach clears the session, freeing the socket for the next owner. It does not
+// emit an end frame: the peer is the one that left.
 func (s *Server) detach(sess *session) {
 	s.mu.Lock()
 	if s.sess == sess {
@@ -344,6 +357,52 @@ func (s *Server) detach(sess *session) {
 	}
 	s.mu.Unlock()
 	sess.shutdown()
+}
+
+// readerEnded is what a session's reader goroutine reports when it stops — EOF
+// or a read error. The two transports mean COMPLETELY different things by it,
+// and conflating them is the bug this split exists to fix.
+//
+//   - On a SOCKET, the peer hung up. The connection is dead in both directions,
+//     so the session is detached and the socket is freed for the next owner.
+//     The engine keeps running: a robot's tick loop does not belong to whoever
+//     last connected, and an engine that stopped every time a debugger
+//     disconnected would be unusable.
+//   - On STDIO, the parent closed the pipe (or went away). That is the end of
+//     the ENGINE's life, because the parent owns it — but the write half is
+//     very much still usable, and the session is deliberately left alive so the
+//     settling neutral pose and the end frame can still reach a parent that is
+//     still reading stdout. Tearing the writer down here is what used to leave
+//     the tick loop spinning in an orphan with nowhere to write.
+func (s *Server) readerEnded(sess *session) {
+	if !s.stdio {
+		s.detach(sess)
+		return
+	}
+	s.note("reader", KindEnd, "the stdio peer closed its end of the pipe")
+	s.endReason.Store(&reasonStdinClosed)
+	s.stdinOnce.Do(func() { close(s.stdinClosed) })
+}
+
+// StdinClosed reports the stdio peer's departure, and is nil for a socket
+// server.
+//
+// It is the ONE thing a composition root needs to stop an engine whose parent
+// has gone away: the endpoint learns it (its reader hit EOF) and the tick loop
+// cannot, since a sink is written to and never called back. A consumer selects
+// on it and cancels the run, which is what turns "the pipes closed" into a
+// clean stop — settle pose, end frame, exit 0 — instead of an orphan process
+// ticking into a closed pipe until somebody signals it.
+//
+// It is deliberately NOT offered for a socket server. A socket peer
+// disconnecting must not stop the engine, so there is no channel there to
+// misuse: the difference between the two transports is in the type, not in a
+// caution somebody has to read.
+func (s *Server) StdinClosed() <-chan struct{} {
+	if !s.stdio {
+		return nil
+	}
+	return s.stdinClosed
 }
 
 // Close stops the listener, tells the peer the stream ended and waits for the
@@ -372,6 +431,14 @@ func (s *Server) Close() { s.closeWithReason("closed") }
 // the end frame keeps exactly the grace it had before the flush existed.
 func (s *Server) closeWithReason(reason string) {
 	s.closeOnce.Do(func() {
+		// The endpoint sometimes knows the CAUSE before the engine reports the
+		// consequence: a stdio peer closing the pipe stops the run, and the
+		// engine then returns "stopped" (or a sink error, because its writes
+		// are going nowhere). "stdin-closed" is the honest reason in both
+		// cases, so a reason the endpoint recorded wins.
+		if known := s.endReason.Load(); known != nil {
+			reason = *known
+		}
 		s.mu.Lock()
 		s.closed = true
 		listener, sess := s.listener, s.sess

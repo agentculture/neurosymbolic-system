@@ -197,16 +197,22 @@ func (r *Runtime) Run(ctx context.Context) error {
 		return clifmt.NewEnvError(err.Error(), "")
 	}
 
+	// runCtx is what actually bounds the tick loop: the caller's ctx (a signal),
+	// or a stdio peer that closed the pipe.
+	runCtx, stopRun := context.WithCancel(ctx)
+	defer stopRun()
+
 	serveCtx, stopServing := context.WithCancel(context.WithoutCancel(ctx))
 	defer stopServing()
 	go r.Server.Serve(serveCtx)
+	r.stopOnStdinClose(runCtx, stopRun)
 
 	r.log.Stage(stage, Verb, "started", fmt.Sprintf(
 		"period=%v channels=%d actions=%d rule_layers=%d providers=%d addr=%s",
 		r.period, len(r.Vocabulary.Channels()), len(r.Vocabulary.Actions()),
 		r.Rules.Layers(), len(r.Providers), r.Server.Addr()))
 
-	err := r.Server.RunWith(ctx, r.Engine.Run)
+	err := r.Server.RunWith(runCtx, r.Engine.Run)
 	stats := r.Engine.Stats()
 	r.log.Stage(stage, Verb, "stopped", fmt.Sprintf(
 		"ticks=%d overruns=%d drops=%d", stats.Ticks, stats.Overruns, stats.Drops))
@@ -215,6 +221,42 @@ func (r *Runtime) Run(ctx context.Context) error {
 			"the transport the engine streams to failed; check the consumer is reading")
 	}
 	return nil
+}
+
+// stopOnStdinClose ends the run when a STDIO peer closes the pipe.
+//
+// In --stdio mode the parent process owns the engine's lifetime: it spawned it,
+// it holds both pipes, and when it goes away there is nobody left to stream to
+// and nobody left to take an intent from. The endpoint is what notices — its
+// reader hits EOF — and the tick loop cannot, because a sink is written to and
+// never called back. So the endpoint's signal is wired to the run's context,
+// and the parent closing the pipe becomes an ordinary graceful stop: last tick,
+// settling neutral pose, an end frame reading "stdin-closed", exit 0.
+//
+// Without this the engine ticked forever into a closed pipe, every pose a
+// silent drop, until somebody signalled it — an orphan process that a parent
+// which had already exited could no longer clean up. That is the failure d3
+// exists to close.
+//
+// A SOCKET server returns a nil channel from StdinClosed, so this is a no-op
+// there, and deliberately: a socket peer disconnecting must not stop the
+// engine. The next owner connects to the same still-running robot.
+func (r *Runtime) stopOnStdinClose(runCtx context.Context, stopRun context.CancelFunc) {
+	gone := r.Server.StdinClosed()
+	if gone == nil {
+		return
+	}
+	go func() {
+		select {
+		case <-gone:
+			r.log.Stage(stage, Verb, "stopping",
+				"the stdio peer closed the pipe; stopping the engine")
+			stopRun()
+		case <-runCtx.Done():
+			// The run ended for its own reasons; nothing to do but let this
+			// goroutine go, rather than leave it parked on a channel forever.
+		}
+	}()
 }
 
 // loadVocabulary reads the adaptor config by extension. The two front ends

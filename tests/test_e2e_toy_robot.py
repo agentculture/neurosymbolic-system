@@ -345,6 +345,62 @@ def test_stdio_settle_pose_is_the_last_pose_before_the_end_frame() -> None:
         bot.stop()
 
 
+@requires_built_engine
+def test_closing_stdin_exits_the_engine_without_a_signal() -> None:
+    """A parent that hangs up must not leave an orphan (deviation d3).
+
+    In --stdio mode the parent owns the engine's lifetime: it spawned it and it
+    holds both pipes. Closing them is the ONLY notice a parent that is going
+    away gets to give — one that has already exited cannot send a signal — so
+    an engine that needed a signal to stop would be an orphan nobody is left to
+    clean up. That was the bug: the tick loop went on composing poses into a
+    closed pipe forever, every one a silent drop.
+
+    The stop must be an ordinary graceful one, with every guarantee intact: the
+    settling neutral pose reaches a parent still reading stdout, the end frame
+    names `stdin-closed` (the CAUSE, not the consequence), and the process
+    exits 0 with no signal sent at any point in this test.
+    """
+    settled: list[str] = []
+    bot = StdioToyRobot(
+        engine=str(ENGINE_PATH),
+        args=engine_args(),
+        settle=settled.append,
+        heartbeat_s=HEARTBEAT_S,
+    )
+    bot.start()
+    try:
+        bot.hello()
+        assert bot.wait_for("hello"), "the engine never greeted back over stdio"
+        # Move the robot off neutral, so "the last pose is neutral" means something.
+        stream_senses(bot, 15, {"bumper": True, "light_level": 0.2, "tag": "a"})
+
+        closed_at = time.monotonic()
+        bot.close_stdin()
+
+        code = bot.wait(timeout=1.0)
+        elapsed = time.monotonic() - closed_at
+        assert code is not None, "the engine outlived its parent's pipe: an orphan"
+        assert code == 0, f"the engine exited {code}, want 0 — a closed pipe is a clean stop"
+        assert elapsed < 1.0, f"the engine took {elapsed:.3f}s to notice the closed pipe"
+
+        assert bot.wait_for("end", timeout=2.0), "no end-of-stream frame after the pipe closed"
+        end = bot.of_kind("end")[0]
+        assert end["reason"] == "stdin-closed", end
+
+        frames = [f for f in bot.frames if f.get("kind") in ("pose", "end")]
+        end_at = next(i for i, f in enumerate(frames) if f["kind"] == "end")
+        assert end_at > 0, "the end frame arrived before any pose"
+        assert frames[end_at - 1]["channels"] == NEUTRAL, frames[end_at - 1]["channels"]
+
+        assert bot.settled and bot.settled[0] == "end:stdin-closed", bot.settled
+    finally:
+        bot.stop()
+
+    log = bot.stderr.decode(errors="replace")
+    assert "the stdio peer closed the pipe" in log, log[-2000:]
+
+
 # --- the fixture consumers must stay consumers ------------------------------
 
 #: Identifiers a consumer must never need. Each names a decision the engine
