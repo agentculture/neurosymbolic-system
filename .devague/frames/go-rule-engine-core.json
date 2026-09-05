@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "drafting",
   "created": "2026-09-05T04:43:37Z",
-  "updated": "2026-09-05T04:44:37Z",
+  "updated": "2026-09-05T04:55:45Z",
   "claims": [
     {
       "id": "c1",
@@ -33,14 +33,20 @@
     {
       "id": "c3",
       "kind": "requirement",
-      "text": "Rules are event-based and tick-based, scalable to many rules, loaded from one YAML file or many.",
+      "text": "Rules are event-based and tick-based, scalable to many rules, loaded from one TOML file or many.",
       "origin": "user",
-      "status": "confirmed",
+      "status": "proposed",
       "honesty_conditions": [],
       "hard_questions": [],
       "links": [],
       "instruction": "",
-      "revisions": []
+      "revisions": [
+        {
+          "text": "Rules are event-based and tick-based, scalable to many rules, loaded from one YAML file or many.",
+          "kind": "requirement",
+          "reason": "q3: TOML, not YAML \u2014 both donors' overlays are TOML with schema_version"
+        }
+      ]
     },
     {
       "id": "c4",
@@ -309,7 +315,25 @@
     {
       "id": "c26",
       "kind": "success_signal",
-      "text": "microduck-cli and reachy-mini-cli each delete their own behavior/rules.py + rule_engine.py and load their existing rules.toml overlays through the Go binary with zero behavior change on the robot (the same live suites pass).",
+      "text": "microduck-cli and reachy-mini-cli, on their own side and in their own PRs, load their existing schema_version = 1 rules.toml overlays through the Go engine with zero behavior change on the robot (their live suites pass); this repo ships the engine and a conformance fixture set, not the consumer swap.",
+      "origin": "llm",
+      "status": "proposed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": [
+        {
+          "text": "microduck-cli and reachy-mini-cli each delete their own behavior/rules.py + rule_engine.py and load their existing rules.toml overlays through the Go binary with zero behavior change on the robot (the same live suites pass).",
+          "kind": "success_signal",
+          "reason": "q6: only this repo is touched; consumers pull and test"
+        }
+      ]
+    },
+    {
+      "id": "c27",
+      "kind": "success_signal",
+      "text": "Per-tick evaluation of a loaded rule set on the target arm64 box stays under a measured budget (a number set by the tick-rate decision, well inside the donor's 20 ms at 50 Hz), with steady-state RSS reported alongside.",
       "origin": "llm",
       "status": "proposed",
       "honesty_conditions": [],
@@ -319,11 +343,59 @@
       "revisions": []
     },
     {
-      "id": "c27",
-      "kind": "success_signal",
-      "text": "Per-tick evaluation of a loaded rule set on the target arm64 box stays under a measured budget (a number set by the tick-rate decision, well inside the donor's 20 ms at 50 Hz), with steady-state RSS reported alongside.",
-      "origin": "llm",
-      "status": "proposed",
+      "id": "c28",
+      "kind": "requirement",
+      "text": "Two transports, each serving a purpose: a persistent stream (unix socket or stdio) for constant communication and control at tick rate, and a one-off per-command call for management verbs. Which one a robot uses depends on its integration surface.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c29",
+      "kind": "requirement",
+      "text": "The Python CLI stays the management surface, as today, and shrinks; the engine is Go, built on-device with go build for now. Wheel-embedded binaries or release assets are a later decision.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c30",
+      "kind": "requirement",
+      "text": "The Go engine owns the whole tick \u2014 arbitration, composition, pose streaming \u2014 the heavy surface; consumers keep only adaptors and configuration.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c31",
+      "kind": "boundary",
+      "text": "Only this repo is touched by this work. Donor repos (reachy-mini-cli, microduck-cli, arm101-cli, reachy_nova) are read to learn; they pull the new engine and test on their side, in their own PRs.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": [],
+      "instruction": "",
+      "revisions": []
+    },
+    {
+      "id": "c32",
+      "kind": "boundary",
+      "text": "Collision and allowed-motion safety for the motors lives on the lower-level surface that controls the motors, where it is faster. The engine supports safety-style reactive rules only when motor state is fed in as events, and that is not the fast path.",
+      "origin": "user",
+      "status": "confirmed",
       "honesty_conditions": [],
       "hard_questions": [],
       "links": [],
