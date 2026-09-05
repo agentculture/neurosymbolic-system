@@ -2,7 +2,7 @@
   "plan_slug": "go-rule-engine-core",
   "schema_version": 2,
   "created": "2026-09-05T06:07:14Z",
-  "updated": "2026-09-05T07:22:48Z",
+  "updated": "2026-09-05T07:46:00Z",
   "deviations": [
     {
       "id": "d1",
@@ -31,6 +31,20 @@
       "status": "proposed",
       "classification": null,
       "seq": 2
+    },
+    {
+      "id": "d3",
+      "what": "Conformance replay (t14) found that 'neurosymbolic-engine run --stdio' does not exit when its stdin closes: the tick loop stops and the stopped line is written, but the process lingers until SIGTERM. Fixed as t13c on a fresh worktree by the composition-root agent: EOF on the stdio reader cancels the run context so the process exits 0 after the end frame; covered by a Go test and the stdio e2e.",
+      "task_ref": "t13",
+      "reason": "a lifecycle bug found by the conformance stdio test; no task owns it",
+      "affects": [
+        "t13",
+        "t8"
+      ],
+      "origin": "llm",
+      "status": "proposed",
+      "classification": null,
+      "seq": 3
     }
   ],
   "evidence": [],
