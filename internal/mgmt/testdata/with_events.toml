@@ -1,0 +1,23 @@
+# Fixture for internal/mgmt's rules-check/rules-list tests: a minimal
+# schema_version-1 file with one react rule plus two [[event]] entries, so
+# `rules check`'s summary line and `rules list`'s text/JSON output can be
+# asserted against a known event count without depending on any donor's
+# real rules file.
+schema_version = 1
+
+[[react]]
+id = "sample-react"
+when = { field = "sample_field", op = "is_true" }
+run = "sample-action"
+
+[[event]]
+source = "tracking"
+type = "face_seen"
+priority = "NORMAL"
+urgency = "DEFERRABLE"
+
+[[event]]
+source = "rule"
+type = "fire"
+priority = "HIGH"
+urgency = "NOW"
