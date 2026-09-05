@@ -29,6 +29,8 @@ carries the architecture brief.
 - `neurosymbolic-system overview` — descriptive snapshot of the agent.
 - `neurosymbolic-system doctor` — check the agent-identity invariants.
 - `neurosymbolic-system cli overview` — describe the CLI surface.
+- `neurosymbolic-system engine overview` — describe the engine noun group.
+- `neurosymbolic-system rules overview` — describe the rules noun group.
 
 ## Exit-code policy
 
@@ -98,7 +100,10 @@ _DOCTOR = """\
 
 Checks the agent-identity invariants `steward doctor` verifies:
 prompt-file-present and backend-consistency (`colleague` → `AGENTS.colleague.md`), plus a
-skills-present check. Exits 1 when unhealthy.
+skills-present check, and two engine checks (`engine_present`,
+`engine_protocol` — spec h35). Only `severity: error` checks affect the
+overall verdict, so a box with no `neurosymbolic-engine` built yet still
+reports healthy. Exits 1 when unhealthy.
 
 ## Usage
 
@@ -118,6 +123,47 @@ itself (distinct from the global `overview`, which describes the agent).
     neurosymbolic-system cli overview --json
 """
 
+_ENGINE = """\
+# neurosymbolic-system engine
+
+Thin delegate over the `neurosymbolic-engine` Go binary (see
+`neurosymbolic_system.engine_client`): `status`, `version` and `doctor` each
+shell out to the matching engine verb and relay its `{code, message,
+remediation}` verbatim on failure. A missing binary is an environment error
+(exit 2) naming the `go build` remediation. `overview` is descriptive and
+never touches the binary.
+
+## Locator
+
+- `NEUROSYMBOLIC_ENGINE` env var, if set and executable
+- otherwise: `neurosymbolic-engine` on `PATH`
+
+## Usage
+
+    neurosymbolic-system engine overview
+    neurosymbolic-system engine status
+    neurosymbolic-system engine version --json
+    neurosymbolic-system engine doctor
+"""
+
+_RULES = """\
+# neurosymbolic-system rules
+
+Thin delegate over the `neurosymbolic-engine rules` verbs: `check`, `list`,
+`migrate` and `reload` each shell out to the matching engine verb and relay
+its result (or its `{code, message, remediation}` failure) verbatim. A
+missing binary is an environment error (exit 2) naming the `go build`
+remediation. `overview` is descriptive and never touches the binary.
+
+## Usage
+
+    neurosymbolic-system rules overview
+    neurosymbolic-system rules check rules.toml [--adaptor adaptor.toml]
+    neurosymbolic-system rules list rules.toml
+    neurosymbolic-system rules migrate rules.toml [--out rules.v2.toml] [--force]
+    neurosymbolic-system rules reload rules.toml
+"""
+
 
 ENTRIES: dict[tuple[str, ...], str] = {
     (): _ROOT,
@@ -129,4 +175,8 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("doctor",): _DOCTOR,
     ("cli",): _CLI,
     ("cli", "overview"): _CLI,
+    ("engine",): _ENGINE,
+    ("engine", "overview"): _ENGINE,
+    ("rules",): _RULES,
+    ("rules", "overview"): _RULES,
 }
