@@ -4,7 +4,7 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-09-05T04:43:37Z",
-  "updated": "2026-09-05T05:39:59Z",
+  "updated": "2026-09-05T05:42:54Z",
   "claims": [
     {
       "id": "c1",
@@ -308,7 +308,7 @@
         {
           "id": "h37",
           "text": "Every suppression and every provider drop writes exactly one stderr line in the SENSE grammar (stage, source and event as key=value pairs inside square brackets) at streak entry, on reason change, and at streak end with the tick count; stdout carries nothing but results.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -691,9 +691,9 @@
     {
       "id": "c34",
       "kind": "requirement",
-      "text": "The schema carries the donor fields c11 omitted: [modes.<name>] parameter sets with a required active_mode when any mode is defined (rules.py, microduck refuses modes with no active_mode), per-rule params overrides validated against the action's declared domain, and a react rule's say text (MAX_SAY_CHARS = 500, refused never truncated) forwarded as data to a consumer-declared speech action \u2014 otherwise reachy's overlays do not 'load unchanged' (h6) and set-mode intents (c14) have nothing to select. [challenge / adjacent-systems lens: reachy/behavior/rules.py _REACT_FIELDS, _TOP_LEVEL_FIELDS; microduck rules.py active_mode refusal]",
+      "text": "The schema carries the donor fields c11 omitted: [modes.NAME] parameter sets with a required active_mode when any mode is defined (rules.py, microduck refuses modes with no active_mode), per-rule params overrides validated against the action's declared domain, and a react rule's say text (MAX_SAY_CHARS = 500, refused never truncated) forwarded as data to a consumer-declared speech action \u2014 otherwise reachy's overlays do not 'load unchanged' (h6) and set-mode intents (c14) have nothing to select. [challenge / adjacent-systems lens: reachy/behavior/rules.py _REACT_FIELDS, _TOP_LEVEL_FIELDS; microduck rules.py active_mode refusal]",
       "origin": "llm",
-      "status": "confirmed",
+      "status": "proposed",
       "honesty_conditions": [
         {
           "id": "h29",
@@ -705,7 +705,13 @@
       "hard_questions": [],
       "links": [],
       "instruction": "",
-      "revisions": []
+      "revisions": [
+        {
+          "text": "The schema carries the donor fields c11 omitted: [modes.<name>] parameter sets with a required active_mode when any mode is defined (rules.py, microduck refuses modes with no active_mode), per-rule params overrides validated against the action's declared domain, and a react rule's say text (MAX_SAY_CHARS = 500, refused never truncated) forwarded as data to a consumer-declared speech action \u2014 otherwise reachy's overlays do not 'load unchanged' (h6) and set-mode intents (c14) have nothing to select. [challenge / adjacent-systems lens: reachy/behavior/rules.py _REACT_FIELDS, _TOP_LEVEL_FIELDS; microduck rules.py active_mode refusal]",
+          "kind": "requirement",
+          "reason": "markdown lint: '<name>' rendered as inline HTML in the export"
+        }
+      ]
     },
     {
       "id": "c35",
@@ -767,7 +773,7 @@
         {
           "id": "h38",
           "text": "The engine refuses to start with a TCP listen address unless an explicit --insecure-tcp flag is passed; the created unix socket has mode 0600 and lives in the directory the consumer passed; a test asserts both and that no listener exists on any TCP port after startup.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],

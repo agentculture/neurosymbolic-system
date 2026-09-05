@@ -1,6 +1,6 @@
 # Go rule engine core
 
-> neurosymbolic-system ships as one static Go binary: the rule engine that powers rule-based CLI actions for any robot — event-based and tick-based rules from one or many YAML files, an optional embedding/small-model fast path, driven from Python by reachy-mini-cli, microduck-cli and arm101-cli through a thin stdlib client the way culture-nodes drives its Go control plane; each robot adds only adaptors and configuration
+> neurosymbolic-system ships as one static Go binary: the rule engine that powers rule-based CLI actions for any robot — event-based and tick-based rules from one or many TOML files, an optional embedding/small-model fast path, driven from Python by reachy-mini-cli, microduck-cli and arm101-cli through a thin stdlib client the way culture-nodes drives its Go control plane; each robot adds only adaptors and configuration
 
 ## Audience
 
@@ -37,7 +37,7 @@
 - One admission inbox serves rule-fired and agent-injected intents alike (run once, standing goal, set mode, inhibit): the donor's intents.py namespaced spool and microduck's single admission registry are the two existing shapes.
   - honesty: A rule-fired action and an agent-injected intent (run once, standing goal, set mode, inhibit) enter the same admission registry and are arbitrated by the same class and recency rules; an inhibit blocks both sources alike.
 - Every drop names its reason on stderr in the \[SENSE stage=... source=... event=...\] grammar (`reachy_nova` `sensory_log.py` -> donor senselog), and gated streaks log per episode, not per tick (donor #99: 6722 drop lines in a 3 h window before the fix).
-  - honesty: Every suppression and every provider drop writes exactly one stderr line in the \[SENSE stage=<stage> source=<source> event=<event>\] grammar at streak entry, on reason change, and at streak end with the tick count; stdout carries nothing but results.
+  - honesty: Every suppression and every provider drop writes exactly one stderr line in the SENSE grammar (stage, source and event as key=value pairs inside square brackets) at streak entry, on reason change, and at streak end with the tick count; stdout carries nothing but results.
 - linux/arm64 is the first-class build target (Jetson Orin and Thor, DGX Spark, the Reachy wireless unit — the only platforms microduck-cli's README records), linux/amd64 for dev; CGO off so the binary has no libc coupling.
   - honesty: The release build matrix is linux/arm64 and linux/amd64 only, CGO off, and go vet / go test run on both in CI.
 - Two transports, each serving a purpose: a persistent stream (unix socket or stdio) for constant communication and control at tick rate, and a one-off per-command call for management verbs. Which one a robot uses depends on its integration surface.
@@ -46,6 +46,20 @@
   - honesty: The Python package gains no runtime dependency and no bundled binary; it locates the engine on PATH or via `NEUROSYMBOLIC_ENGINE`, and doctor reports a missing or version-mismatched engine as a named environment error with the go build remediation.
 - The Go engine owns the whole tick — arbitration, composition, pose streaming — the heavy surface; consumers keep only adaptors and configuration.
   - honesty: Given a channel list and behaviors claiming channels, the engine's per-tick output is a complete pose (every channel filled, unclaimed ones neutral), streamed at the configured period; a consumer supplies only the sink.
+- The schema carries the donor fields c11 omitted: \[modes.<name>\] parameter sets with a required `active_mode` when any mode is defined (rules.py, microduck refuses modes with no `active_mode`), per-rule params overrides validated against the action's declared domain, and a react rule's say text (`MAX_SAY_CHARS` = 500, refused never truncated) forwarded as data to a consumer-declared speech action — otherwise reachy's overlays do not 'load unchanged' (h6) and set-mode intents (c14) have nothing to select. \[challenge / adjacent-systems lens: reachy/behavior/rules.py `_REACT_FIELDS`, `_TOP_LEVEL_FIELDS`; microduck rules.py `active_mode` refusal\]
+  - honesty: reachy's `default_rules.toml` plus a fixture overlay carrying \[modes.\*\], `active_mode`, params overrides and a say string loads with every field preserved; a say over 500 chars, a params key outside the action's domain, and modes without `active_mode` are each refused naming the rule id.
+- The adaptor declares, per channel, the value shape (e.g. head = 6 floats, antennas = 2, `body_yaw` = 1) and the neutral value in the robot's friendly units; composition fills every unclaimed channel with the declared neutral, and a frame whose channel value has the wrong arity is refused. \[challenge / overlooked-data lens: model.py `neutral_head`(), CHANNELS; the donor's mm/deg/s units converted once at the transport boundary\]
+  - honesty: The toy-robot adaptor declares three channels of arity 6, 2 and 1 with neutrals; a pose frame emitted with no active behavior equals the declared neutrals exactly, and a sink frame with arity 5 on the head channel is refused.
+- Containment on disconnect: the stream protocol carries a heartbeat frame at a declared interval and an explicit end-of-stream frame on graceful stop; the adaptor guide requires the consumer to settle the robot to its declared neutral when the socket closes or the heartbeat lapses, mirroring the donor engine's settle-to-neutral on exit and its `max_errors` tolerance. \[challenge / failure-mode + recovery lens: engine.py docstring 'settle-to-neutral on exit', EngineConfig.`max_errors`\]
+  - honesty: Killing the engine mid-stream delivers either an end-of-stream frame (SIGTERM) or a heartbeat lapse (SIGKILL) to the fixture consumer within two heartbeat intervals, and the fixture consumer's settle-to-neutral handler runs in both cases in the end-to-end test.
+- The stream carries event frames beside pose frames — rule fired, rule suppressed (per-episode), ownership changed, intent admitted or evicted — with the same keys the donor emits through ctx.emit (`EVENT_FIRE` / `EVENT_SUPPRESS`), so an agent or export sink observes decisions structurally; stderr senselog is the human-readable twin, stdout stays clean. \[challenge / observability lens: `rule_engine.py` ctx.emit + TickBus consumers; reachy/cli/`_export.py` JSONL feed\]
+  - honesty: Every rule fire, per-episode suppression, ownership change and intent admit/evict during the conformance replay appears as exactly one event frame on the stream with the donor's `EVENT_FIRE` / `EVENT_SUPPRESS` keys, and stdout of the engine process is empty.
+- The loader never rewrites a rules file in place. Moving an overlay from `schema_version` 1 to 2 is an explicit rules migrate verb that writes a new file and keeps the original, because a v2 file no longer loads in either donor's Python engine and a box must be able to roll back to it. \[challenge / migration + reversibility lens: microduck rules.py `SCHEMA_VERSION` = 1 single accepted value; reachy rules.py two-layer merge\]
+  - honesty: rules migrate on a schema-1 overlay writes <name>.v2.toml, leaves the original byte-identical, and the loader refuses any verb that would write to a path it was given as input.
+- All engine state mutates on one tick goroutine; the stream reader, the management endpoint and the provider worker only enqueue onto bounded channels drained at tick start, mirroring the donor's between-tick command-spool drain; a full inbox is a named drop, never a lock held across a tick. \[challenge / concurrency lens: engine.py `_apply_commands` drain; intents.py namespaced spool\]
+  - honesty: A race detector run (go test -race) over a test that hammers the stream, the management endpoint and the provider worker concurrently for 10,000 ticks reports no data race, and a full inbox shows as a named drop line.
+- Every stream and management frame carries a protocol version; a mismatch between the Python client and the engine is refused with a named error and the go build remediation, the same fail-closed rule `schema_version` applies to rules files. \[challenge / migration lens: culture-nodes GET /v1alpha1/version + main.revision, issue #104 there\]
+  - honesty: A client frame with protocol version N+1 against an engine at N is refused with a structured error naming both versions and the go build remediation; the Python doctor check surfaces the same mismatch.
 
 ## Honesty conditions
 
@@ -56,6 +70,7 @@
 - The decision provider client is warmed at startup and called from a worker behind a bounded queue; a fixture provider that sleeps 2 s produces zero tick overruns and exactly one named drop line per abstention.
 - The Go binary's whoami / doctor / version verbs emit error: and hint: lines on stderr, results on stdout, exit 0 / 1 / 2, and honor --json — asserted by the same contract tests the Python CLI already runs.
 - The engine ships no motion primitive: an action is an opaque name plus params validated against the adaptor's declared domain, and the fixture sink receives the name and params unchanged.
+- The toy-robot adaptor declares an action as a keyframe trajectory on two channels; the engine's pose frames over its duration match the trajectory sampled at the tick period to within float tolerance, and an action declared without a trajectory for a channel it claims is refused at load.
 - The cited counts hold at the recorded commits: reachy-mini-cli behavior/ + motion/ about 20k lines with 18 files importing reachy.cli.`_errors` or reachy.daemon; microduck-cli behavior/ requiring `schema_version` = 1; arm101-cli with no behavior package — re-verifiable by wc and grep at those commits.
 - The fixture toy robot adaptor in tests/ is under 200 lines and contains no arbitration, validation, timing or drop-logging code of its own.
 - A conformance fixture set derived from both donors' rule tests (rules file + sense trace in, expected fire / suppress / pose trace out) replays byte-identically through the engine; the consumer-side swap is explicitly out of scope and listed as the consumers' work.
@@ -63,6 +78,7 @@
 - No commit in this work touches a path outside this repository; every sibling-facing need is filed as an issue through the communicate skill and listed in the delivery summary.
 - The engine performs no motor-level collision or limit check; motor-state rules work only when the adaptor declares those fields as senses, and the adaptor guide states that the fast path for motor safety is the consumer's motor-control surface.
 - Schema version 2 accepts all: and any: lists of predicates (nesting to one level), rejects empty lists and an unknown key beside them, and every schema-1 file still loads under the schema-2 validator; no rule text is executed as code.
+- The engine refuses to start with a TCP listen address unless an explicit --insecure-tcp flag is passed; the created unix socket has mode 0600 and lives in the directory the consumer passed; a test asserts both and that no listener exists on any TCP port after startup.
 
 ## Success signals
 
@@ -74,9 +90,10 @@
 - The Go core never links a robot SDK, transport or media stack; the pose sink, sense peeks, speech and intent inbox are adaptors in the consumer, as the donor's TargetSink / SenseProviders seams already prescribe (18 donor files still import reachy.cli.`_errors` or reachy.daemon — that debt stays on the donor side).
 - No model inference runs inside the core process: the embedding / small-model fast path is an injected provider behind a timeout with a named drop, off the tick thread — the donor's reachy/stash/embeddings.py already talks to a local OpenAI-compatible /v1/embeddings gateway (Qwen3-Embedding-0.6B) over stdlib HTTP.
 - The Python agent-first CLI (whoami / learn / explain / doctor, the teken rubric gate) stays as the introspection surface; the Go binary mirrors its error contract (exit 0/1/2, error: / hint: lines, --json) the way culture-nodes' internal/clifmt does.
-- Motion rendering and the behavior library stay in the consumer (reachy's 39 LIBRARY entries with Param domains, microduck's skills); the core arbitrates named actions it does not know how to render.
+- The engine ships no motion primitives of its own: every action is adaptor-declared DATA — per claimed channel, a trajectory (keyframes or easing curve over behavior-local time `t_local`, with Param domains) that the engine samples into numeric channel values each tick. The donor's 39 LIBRARY entries and microduck's skills become such declarations on the consumer side, and the core renders nothing it was not handed as data.
 - Only this repo is touched by this work. Donor repos (reachy-mini-cli, microduck-cli, arm101-cli, `reachy_nova`) are read to learn; they pull the new engine and test on their side, in their own PRs.
 - Collision and allowed-motion safety for the motors lives on the lower-level surface that controls the motors, where it is faster. The engine supports safety-style reactive rules only when motor state is fed in as events, and that is not the fast path.
+- The engine listens only on a unix socket (or stdio), never TCP by default; the socket is created 0600 inside a consumer-provided directory, so a second local user cannot inject intents or read poses. culture-nodes' :8080 TCP listener is a server-side precedent that does not transfer to a robot. \[challenge / security lens: cmd/nodes/serve.go defaultListenAddr vs the on-device threat model\]
 
 ## Non-goals
 
@@ -88,6 +105,8 @@
 
 - The Python side of each consumer is a thin stdlib client of the Go binary, mirroring culture-nodes' `culture_nodes`/`api_client.py`: urllib only, zero deps, the {code, message, remediation} error body relayed verbatim as a CliError.
 - Two donors, not one: the extraction source is reachy-mini-cli's reachy/behavior/ AND microduck-cli's `microduck_cli`/behavior/ (its decision c20, extraction-first), and the Go loader must accept both robots' existing `schema_version` = 1 rules.toml overlays or ship a documented migration.
+- The engine ticks on its own clock regardless of frame arrival: a sense frame replaces the snapshot, a missing field is None, and the engine stamps per-field last-seen time itself so `absent_for` and \*`_age_s` work without the consumer sending timestamps; no frame for N ticks means a stale snapshot with growing age, never a blocked or skipped tick. \[challenge / data-flow lens: `rule_engine.py` `absent_for` per-field last-seen clock; sense.py \*`_age_s` sampled once per tick; engine.py peek semantics\]
+- The stdio transport uses the same length-prefixed JSON framing on the child's stdin/stdout, so a consumer that spawns the engine as a child process gets lifecycle ownership for free (parent exit ends the engine) — this is the simplest answer to hard question q5 for consumers that own their process tree; senselog stays on stderr. \[challenge / adjacent-systems lens: `reachy_nova`/`kiro_acp.py` drives an external binary over stdio; c28 names stdio\]
 
 ## Scope exploration
 
@@ -113,6 +132,28 @@
   - seeds: `c14`, `c20`
 - `s11` — `Both donors' behavior/liveness.py + reachy-mini-cli CLAUDE.md hardware-ownership section`: Cross-process arbitration is a state.json heartbeat, not a flag file; one SDK client and one single-consumer media session per robot; a foreground verb beside a live engine exits 1. All of it is process supervision the consumer owns.
   - seeds: `c22`
+- `s12` — `challenge pass / unstated-assumptions lens: exported spec header vs c3, c20 vs c30`: The announcement still said YAML after q3 chose TOML (c1 amended); c20 (engine renders no motion) and c30 (engine composes a numeric pose each tick) contradict unless actions are adaptor-declared sampleable data or the pose frame carries owner + action + `t_local` — raised as blocking q6 on c30.
+  - seeds: `c1`, `c30`
+- `s13` — `challenge pass / adjacent-systems lens: reachy/behavior/rules.py _REACT_FIELDS + _TOP_LEVEL_FIELDS, microduck rules.py active_mode refusal`: c11 dropped three donor schema fields — modes/`active_mode`, params overrides, say (`MAX_SAY_CHARS` = 500) — without which h6 ('loads unchanged') is false and set-mode intents have nothing to select; seeded c34.
+  - seeds: `c34`
+- `s14` — `challenge pass / data-flow lens: rule_engine.py absent_for last-seen clock, sense.py *_age_s, engine.py peek semantics`: Over a socket the consumer pushes frames instead of the engine peeking; who stamps freshness and what happens when frames stop was unstated — seeded c35 (engine-side last-seen, own clock, never a blocked tick).
+  - seeds: `c35`
+- `s15` — `challenge pass / overlooked-data lens: model.py neutral_head() and CHANNELS, the donor's units-at-the-boundary rule`: Channels were config but their arity and neutral value were not; composition cannot fill an unclaimed channel without them — seeded c36.
+  - seeds: `c36`
+- `s16` — `challenge pass / lifecycle lens: reachy/behavior/reload_driver.py (279 lines), intents.py runtime-agent path`: Hot reload of an operator's overlay on a live robot exists in the donor and is absent from the spec; a runtime agent authoring rules needs it too — routed as user question q7 (verb, file watch, or restart).
+- `s17` — `challenge pass / failure-mode + recovery lens: engine.py settle-to-neutral on exit, EngineConfig.max_errors`: Engine death mid-stream had no containment: the consumer must be told (end-of-stream frame, heartbeat lapse) and must settle — seeded c37.
+  - seeds: `c37`
+- `s18` — `challenge pass / security lens: culture-nodes cmd/nodes/serve.go TCP :8080 vs the on-device threat model`: A TCP listener or a world-writable socket lets any local user inject intents into a robot; seeded boundary c38 (unix socket or stdio only, 0600, consumer-owned dir).
+  - seeds: `c38`
+- `s19` — `challenge pass / observability lens: rule_engine.py ctx.emit EVENT_FIRE / EVENT_SUPPRESS, TickBus consumers, reachy/cli/_export.py JSONL feed`: The spec kept stderr senselog but dropped the structured event feed agents and export sinks consume in the donor; seeded c39 (event frames on the stream).
+  - seeds: `c39`
+- `s20` — `challenge pass / migration + reversibility lens: microduck rules.py SCHEMA_VERSION = 1, reachy rules.py two-layer merge`: A v2 overlay cannot roll back to either Python engine; in-place upgrades would strand a box — seeded c40 (never rewrite in place; explicit rules migrate writes a new file). Wire-protocol drift between client and engine had the same gap — seeded c43.
+  - seeds: `c40`, `c43`
+- `s21` — `challenge pass / concurrency lens: engine.py _apply_commands between-tick drain, intents.py namespaced spool`: Three writers (stream reader, management endpoint, provider worker) plus the tick were unconstrained; seeded c41 (single tick goroutine mutates; others enqueue on bounded channels; full inbox is a named drop).
+  - seeds: `c41`
+- `s22` — `challenge pass / adjacent-systems lens: c28's stdio option, reachy_nova/kiro_acp.py driving an external binary over stdio`: stdio framing gives child-process lifecycle for free and answers hard question q5 for consumers that own their process tree — seeded assumption c42.
+  - seeds: `c42`
+- `s23` — `challenge pass / UNEXAMINED: reachy/behavior/{goto_lane,goto_intent,speech_act,tick_metrics}.py, microduck_cli/behavior/{compose,sink,replay}.py, culture-nodes tests/conformance`: Not read in this pass: the donor's direct-pose goto lane (parked as v2), the speech actuator worker, `tick_metrics`' seam-wrapping overrun measurement, microduck's replay of recorded sense JSONL (a likely conformance-fixture precedent for t14), and culture-nodes' conformance kit shape. Residual surprise risk lives there.
 
 ## Decisions
 
@@ -125,7 +166,9 @@
 - risk: A provider call on the tick thread is the 425-1213 ms client-construction incident again; the fast path must be a pre-warmed client called off-thread with a bounded queue, and its result consumed on a later tick.
 - Who owns the socket lifecycle when both the stream and a one-off management call are live: does a management call go through the running engine (one process, one owner of the hardware seam) or start a second short-lived process? The donors' liveness rule says a foreground verb beside a live engine must refuse.
 - risk: go build on a robot box needs a Go toolchain (~250 MB) and module cache on-device; Jetson boxes have the disk, but a fresh box with no network cannot fetch modules — vendor the module tree or ship go.sum-pinned builds from CI later.
+- c20 says the engine renders no motion and actions are opaque names; c30 says the engine composes a complete numeric pose every tick. Both cannot hold unless the adaptor declares each action as DATA the engine can sample — keyframes or easing curves per channel over `t_local` (the donor's 'behaviors are pure functions of behavior-local time', library.py) — OR the 'pose frame' is per-channel owner + action + `t_local` for the consumer to render. Which? It decides t4, t8 and t13. \[challenge / unstated-assumptions lens: library.py LibraryEntry contributions vs c20/c30\] (resolved: Actions are adaptor-declared sampleable data: each action names, per channel it claims, a trajectory (keyframes or easing curve over behavior-local time `t_local`, with Param domains) that the engine samples into numeric channel values each tick; the pose frame is numbers, and the engine ships no motion primitives of its own. c20 amended to match.)
 
 ## Open parks
 
 - [unknown_nonblocking] The latency and memory budget of the embedding / small-model fast path on the target arm64 box is unmeasured: no consumer runs an on-device embedding runtime today (reachy's stash calls a gateway serving Qwen3-Embedding-0.6B; `reachy_nova` lazy-loads YOLO and parakeet in Python threads), so the 'decide fast' promise has no number behind it yet.
+- [unknown_nonblocking] Whether reachy's goto lane (`goto_intent.py`: direct pose intents with `MAX_DURATION_S` = 10 s and per-axis bounds, refused not clamped) is an intent kind the engine must admit or stays a consumer-side bypass — not examined in this pass. \[challenge / overlooked-data-flow lens\]
