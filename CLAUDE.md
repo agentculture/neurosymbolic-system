@@ -28,17 +28,45 @@ Two consumers are named, and the second is the reason this repo exists:
 you are deciding whether a piece belongs here, ask whether MicroDuck would want
 it — not whether Reachy Mini has it.
 
-### State on disk today (be honest about this)
+### State on disk today
 
-**No runtime code has been extracted yet.** What is checked in is the
-`culture-agent-template` scaffold: an agent-first CLI (`whoami`, `learn`,
-`explain`, `overview`, `doctor`, `cli overview`), the mesh identity, the vendored
-skill kit, and the CI/publish baseline. Everything under
-[The runtime being extracted](#the-runtime-being-extracted) describes the
-**donor's** architecture and the target shape — it is a design brief, not a
-description of this package. Keep it that way: as each piece lands here, move it
-out of that section and document it as it exists on disk. If a section drifts
-ahead of reality, mark it `(planned)`.
+The runtime has been extracted. It is a Go module
+(`github.com/agentculture/neurosymbolic-system`, `go.mod`) built around one
+binary, `cmd/neurosymbolic-engine`, plus the Python agent-first CLI that was
+here from the start:
+
+```text
+cmd/neurosymbolic-engine/   the runtime's entry point — thin, see main.go's own doc comment
+internal/
+  adaptor/                 the robot vocabulary: channels, senses, actions, trajectories (JSON + TOML front ends)
+  rules/                   the react/inhibit/modes/event schema and layered loader — data only, no evaluation
+  ruleeval/                predicate evaluation + the one admission registry, over a live sense snapshot
+  sense/                   the per-tick Snapshot/SenseSink shape
+  tick/                    arbitration + composition — the engine core, pure, no I/O
+  stream/                  the wire endpoint: unix socket / stdio, frame codec, backpressure
+  events/                  event routing metadata (priority/urgency/voice) — never feeds arbitration
+  provider/                the OpenAI-compatible decision-provider seam driver
+  senselog/                the "[SENSE stage=... ]" stderr grammar
+  mgmt/                    one-shot verbs (version, whoami, doctor, status, rules ...), shared by argv and the stream's mgmt frames
+  clifmt/                  the CLI error/output contract (error:/hint:, --json)
+  compose/                 the composition root: `run`'s flags, and the only package allowed to import all the others
+  bench/                   the synthetic tick-load benchmark (`bench` verb)
+  conformance/             fixtures replaying donor rule sets/sense traces, checked against the donors' own tests
+  allowlist/               the dependency-graph guard docs/go-dependencies.md describes
+neurosymbolic_system/
+  engine_client.py          stdlib subprocess client for the built binary (locator, argv, error relay)
+  cli/_commands/engine.py   `engine` noun — status/version/doctor delegates
+  cli/_commands/rules.py    `rules` noun — check/list/migrate/reload delegates
+tests/toy_robot/             a third, fictional plant (adaptor.toml + rules.toml + client.py) proving the engine holds no robot literal
+```
+
+Everything under
+[The runtime as built](#the-runtime-as-built) below now describes what
+exists on disk, replacing the earlier design brief; it links
+[`docs/specs/2026-09-05-go-rule-engine-core.md`](docs/specs/2026-09-05-go-rule-engine-core.md)
+rather than restating it. The Python CLI section below it (`## The CLI that
+exists today`) is unchanged in shape — `engine`/`rules` are two more noun
+groups registered the same way `whoami`/`learn`/`explain` always were.
 
 ## Identity
 
@@ -72,6 +100,17 @@ uv run teken cli doctor . --strict                   # the agent-first rubric ga
 uv run neurosymbolic-system whoami                   # or: python -m neurosymbolic_system
 ```
 
+The `engine`/`rules` verbs, and the pytest suites that exercise them
+(`tests/test_cli_engine.py`, `tests/test_e2e_toy_robot.py`,
+`tests/test_engine_client.py`), need a **built** binary on `NEUROSYMBOLIC_ENGINE`
+first — see the Go gate below:
+
+```bash
+CGO_ENABLED=0 go build -o /tmp/neurosymbolic-engine ./cmd/neurosymbolic-engine
+export NEUROSYMBOLIC_ENGINE=/tmp/neurosymbolic-engine
+uv run pytest -n auto
+```
+
 Lint stack (the CI `lint` job runs all of these; line length is 100 everywhere):
 
 ```bash
@@ -82,11 +121,48 @@ uv run bandit -c pyproject.toml -r neurosymbolic_system   # B101/B404/B603 skipp
 markdownlint-cli2 "**/*.md" "#node_modules" "#.local" "#.claude/skills" "#.teken"
 ```
 
-CI is three jobs (`.github/workflows/tests.yml`): `test` (+ SonarCloud, skipped
-when `SONAR_TOKEN` is absent, so fork PRs stay green), `lint`, and
+CI is three Python jobs (`.github/workflows/tests.yml`): `test` (+ SonarCloud,
+skipped when `SONAR_TOKEN` is absent, so fork PRs stay green), `lint`, and
 `version-check` (PR-only — see the version convention below). Pushing to `main`
 publishes to PyPI via Trusted Publishing (`publish.yml`); PRs do a TestPyPI
 dry-run.
+
+### The Go gate (`.github/workflows/go.yml`)
+
+```bash
+go vet ./...
+go test ./...
+go build -o dist/neurosymbolic-engine ./cmd/neurosymbolic-engine
+file dist/neurosymbolic-engine | grep -q "statically linked"   # CGO_ENABLED=0 must hold on amd64 AND arm64
+```
+
+CI runs the build+test+static-link-assert leg on `linux/amd64` and
+`linux/arm64` (`CGO_ENABLED=0`, the arm64 leg under QEMU), plus one exercise
+of the `-ldflags` version-stamp contract end to end. `go test -race` is not
+wired into `go.yml` yet, but is a live spec acceptance criterion
+(`docs/specs/2026-09-05-go-rule-engine-core.md`'s concurrency-lens honesty
+condition: "a race detector run over a test that hammers the stream, the
+management endpoint and the provider worker concurrently for 10,000 ticks
+reports no data race") and should be run by hand over the three packages with
+concurrent access before touching any of them:
+
+```bash
+go test -race ./internal/stream/... ./internal/tick/... ./internal/compose/...
+```
+
+An arm64 vendor build (what a Jetson-class consumer box actually runs) is
+worth a manual check before a release, since CI's arm64 leg builds with the
+module cache, not `vendor/`:
+
+```bash
+CGO_ENABLED=0 GOARCH=arm64 go build -mod=vendor -o dist/neurosymbolic-engine ./cmd/neurosymbolic-engine
+```
+
+`neurosymbolic-engine bench [--json]` is the tick-budget regression check —
+run it after any change to `internal/tick`, `internal/ruleeval` or
+`internal/stream`; see
+[`docs/verification/2026-09-05-arm64-bench.md`](docs/verification/2026-09-05-arm64-bench.md)
+for a recorded baseline (p99 ~0.6 ms, 0 overruns at the 20 ms budget).
 
 ## The CLI that exists today
 
@@ -120,172 +196,200 @@ on it, and because the runtime's own introspection (list the behavior library,
 lint a rules file, replay a tick) is genuinely useful off-robot. It is **not**
 where robot operation lives — that stays in the consumer CLIs.
 
-## The runtime being extracted
+## The runtime as built
 
-This is the donor architecture, module by module, with the constraint that
-justifies each piece. Read it before you port anything; the file it names in
-`reachy-mini-cli` is the authoritative source, and
-[`reachy-mini-cli/CLAUDE.md`](../reachy-mini-cli/CLAUDE.md) carries the long-form
-evidence (measurements, issue numbers, live probes) for every number quoted here.
+This replaces the earlier design brief with what actually exists on disk. The
+full acceptance-criterion-level record is
+[`docs/specs/2026-09-05-go-rule-engine-core.md`](docs/specs/2026-09-05-go-rule-engine-core.md)
+and its companion plan; this section is the constraints that still hold plus
+what changed on the way from donor Python to this Go engine, not a restatement
+of either document.
 
 ### One tick, one owner per channel
 
-`reachy/behavior/engine.py` holds a set of active behaviors and, each tick:
-drops expired ones → arbitrates a single owner per channel → asks each owner for
-its contribution *once* → composes a **complete** pose (unclaimed channels fall
-to neutral, so the target is never partial) → streams it to a `TargetSink` held
-open for the whole loop. `feel-alive` is seeded as a passive base layer so an
-idle robot keeps breathing.
+`internal/tick.Engine.Run` holds a set of active behaviors and, each tick:
+drops expired ones → arbitrates a single owner per channel
+(`internal/tick`'s arbitration, ported from `reachy/behavior/arbitration.py`)
+→ asks each owner for its contribution once → composes a **complete** pose
+(unclaimed channels fall to their declared neutral, so the target is never
+partial) → streams it to the `adaptor.Sink` the composition root wired in
+(`internal/stream.Server` in `run`; the toy-robot fixture's own sink in
+tests). A `--base-action` is seeded as a passive base layer so an idle robot
+keeps moving.
 
-- **Channels** (`behavior/model.py`) are groups of DOF claimed and resolved
-  atomically — for Reachy Mini `("head", "antennas", "body_yaw")`, mirroring the
-  daemon's three independent target fields. `CHANNELS` is the single source of
-  truth; arbitration and composition iterate it, never the literals. **This tuple
-  is robot-specific** — the first thing the extraction has to parameterize.
-- **Arbitration** (`behavior/arbitration.py`) is two pure functions, no I/O and
-  no clock. `arbitrate` runs every tick and assigns each channel an owner by
-  `(class priority, recency)`; `admit` runs on add and decides what a newcomer
-  evicts. Four contention classes: `passive` (owns only what nothing else
-  claims), `stoppable`, `unstoppable` (owns its channels while alive), `stopping`
-  (evicts shared `stoppable`s on admit). Admission is *total* — contention a
-  newcomer cannot win by removal is simply resolved per tick.
-  Arbitration is **abstention-aware**: a claimant whose contribution leaves a
-  channel `None` is skipped, so a sound-reactive behavior with no sound yields
-  the head back to `feel-alive` instead of freezing it.
-- **Units** are the friendly ones — millimetres, degrees, seconds — converted to
-  the transport's metres/radians at the boundary, exactly once.
-- **Behaviors are pure functions of behavior-local time** (`behavior/model.py`,
-  `library.py`): same `t_local`, same offsets, `sense` ignored. Only an entry
-  that declares `wants_sense=True` is minted per-instance and may hold state.
-  Purity is what makes motion reproducible and the whole core unit-testable
-  without hardware.
+- **Channels, senses and actions are declared, not compiled in**
+  (`internal/adaptor`) — see the [Adaptor guide](README.md#adaptor-guide) in
+  the README for the full schema. This is the piece the design brief called
+  "the first thing the extraction has to parameterize"; it is now the
+  vocabulary every other package asks instead of holding a robot literal.
+  `TestNoDonorLiteralsInEngineSources` enforces this mechanically — a name
+  either donor robot uses, appearing as a whole string literal in non-test
+  engine source, fails the build (issue #6 below is its one exemption list).
+- **Arbitration** (`internal/tick`) is two pure functions, no I/O and no
+  clock, same four contention classes as the donor (`passive`, `stoppable`,
+  `unstoppable`, `stopping`) resolved by `(class priority, recency)`, and
+  abstention-aware exactly as designed: a claimant whose contribution leaves a
+  channel unset is skipped rather than freezing it.
+- **Behaviors are pure functions of behavior-local time.** A `Trajectory`'s
+  `At(tLocal)` (`internal/adaptor/trajectory.go`) is pure and total: same
+  `t_local`, same value, every time — reproducible, testable off-robot. See
+  "Data trajectories instead of a motion library" below for what this
+  replaced.
 
-### The one seam: `tick_seam`
+### The one seam, and what rides it
 
-`engine.run(..., tick_seam=seam)` calls `seam(ctx)` exactly once per tick, after
-the pose has streamed. Everything else — rules, agent intents, sense drivers, the
-goto lane, export feeds, metrics — is a **pure consumer** of that seam.
-`rule_engine.py`'s `TickBus` is the fault-isolating fan-out; `tick_metrics.py`
-wraps the whole seam (not a driver on it) so an overrun measures the real
-end-to-end tick cost.
+`internal/compose` wires arbitration/composition to a fault-isolating fan-out
+(`ruleeval.Bus`) that runs the rules evaluator, then the status rider, then
+the stream's own heartbeat — every rider getting exactly one call per tick,
+after the pose has streamed. This is still the single most important
+structural rule: `internal/tick` imports none of the packages that ride it,
+and the engine only ever calls the opaque seam it was handed. **Seam panic
+isolation is new** relative to the donor's Python semantics — issue #9:
 
-This is the single most important structural rule the donor learned: features got
-added for a year and `engine.py` never had to change. **Never let a consumer
-import the engine's internals, and never let the engine import a consumer.**
+> A panicking tick-seam rider is recovered as a named drop, never fatal.
+> `internal/tick.Engine.Run` recovers a panic raised inside the installed
+> `TickSeam` (and inside each `OnEvent` consumer), emits one senselog line
+> (`[SENSE stage=tick source=seam event=panic]`), counts it in
+> `Stats.SeamPanics`, and continues with the next tick. In Go an unrecovered
+> panic kills the process, and on a robot that means the pose stream stops
+> mid-motion — the donor's Python exception unwinds one rider and the process
+> survives, so this recover is the Go-specific safety net that restores the
+> same guarantee.
 
-`TickContext` exposes `now` / `tick` (injected clock — deterministic under
-`max_ticks`), `sense` (this tick's snapshot, read ungated while a seam is
-installed), `ownership`, `pose`, `emit(event)`, `admit(behavior)`,
-`evict(name)`, `active_names()`.
+### Senses are peek reads over a live snapshot
 
-### Senses are injected callables, never imports
-
-`behavior/sense.py` defines the `Sense` snapshot shape and `SenseProviders` — a
-duck-typed bundle of zero-arg **peek** callables (never consuming reads), so
-multiple consumers reading the same tick's sample never steal from one another.
-The module imports neither the transport nor the SDK; the composition root
-supplies the concrete callables. Every provider degrades to `None` rather than
-raising: a missing reader, a raising reader and a reader returning `None` all
-resolve the same way.
-
-Donor senses worth porting: pat/proprioception (`pat_sense.py` +
-`robot/state_reader.py`), loudness (`rms_sense.py`), heard words
-(`transcript_sense.py`), face and frame availability (`face_sense.py`), sound
-direction (`DoaPoller`). Each carries a freshness field (`*_age_s`) sampled once
-per tick, so a one-shot admitted mid-tick sees the same age a rule predicate
-would.
+`internal/sense.Snapshot`/`SenseSink` is the injected-callable shape the
+design brief called for: multiple consumers reading one tick's sample never
+steal from one another, and a missing or erroring reader degrades to the
+field simply not being present rather than raising. `internal/ruleeval`
+reads it ungated, so a one-shot admitted mid-tick and the rule predicate that
+admitted it agree on every value, including `*_age_s` freshness.
 
 ### Rules are data, never code
 
-`behavior/rules.py` + `rule_engine.py`: `[[react]]` (when a predicate over the
-sense snapshot holds, run a named library entry), `[[inhibit]]` (disable a named
-set), `[modes.<name>]` (declarative parameter sets). Loaded in **two layers** — a
-shipped read-only package resource, plus a box-local overlay that overrides *per
-rule id*, never wholesale. That is the only arrangement where an operator's
-tuning survives an upgrade *and* newly shipped rules reach a deployed box. A
-rule with `enabled = false` is a tombstone: one line in the overlay disables a
-shipped rule without forking its body.
+`internal/rules` + `internal/ruleeval`: `[[react]]`, `[[inhibit]]`,
+`[modes.<name>]`, exactly as designed, plus a schema v1/v2 split (v2 adds one
+level of `all`/`any` nesting) and an `[[event]]` dialect (see below). Layers
+merge **per rule id** via repeated `--rules` flags; `enabled = false` is a
+tombstone. Full schema and worked example: the README's
+[rules file](README.md#the-rules-file) section.
 
-`reachy_nova` solves the same problem with
-`config/nervous-system/rules.yaml` (priority/urgency verdicts on
-`nova/events/<source>/<type>`). Two independent robots converging on
-"declarative rules over a live event snapshot" is the signal that this layer
-belongs in the library.
+**Events are routing metadata, never arbitration input — issue #7:**
+
+> In the event-keyed rule dialect an entry's identity for lookup, layering and
+> override is exactly `source/type`. Priority and urgency are routing
+> metadata plus a one-tick sense field; they never feed arbitration. Lost in
+> the port: `reachy_nova`'s payload-conditional rule overrides
+> (`rule/fire:<rule-id>` selected by `payload["rule"]`) are not representable
+> without making event identity payload-dependent, which the schema's per-id
+> merge and tombstone semantics cannot express cleanly — and `reachy_nova` is
+> a reference, not a consumer, so nothing shipped depends on it.
+
+**Total admission, not MicroDuck's blocking refusal — issue #8:**
+
+> The two donor engines differ on admission: reachy-mini-cli's is *total* (a
+> newcomer is always admitted; contention it cannot win is resolved per tick),
+> MicroDuck's *refuses* a newcomer sharing a channel with an `unstoppable` or
+> `stopping` incumbent. `internal/tick.Admit` ports Reachy's total admission —
+> the more general contract, since MicroDuck's refusal is derivable from the
+> `Blocked` list `Admit` returns but the reverse is not. **A consumer wanting
+> MicroDuck's blocking semantics reads `Blocked` and evicts the newcomer
+> itself** — this is consumer-side work, not a gap in the engine.
 
 ### Drop, don't block — the tick budget is the product
 
-At 50 Hz the budget is 20 ms, and every donor incident of note was something
-stealing it:
+Unchanged in spirit from the design brief, verified rather than assumed: see
+[`docs/verification/2026-09-05-arm64-bench.md`](docs/verification/2026-09-05-arm64-bench.md)
+for a recorded 10,000-tick run at p99 ~0.6 ms against the 20 ms budget, zero
+overruns. Outbound stream telemetry is bounded (default depth 8) and dropped
+newest-first rather than blocking the tick goroutine; every drop is a named
+`senselog` line, stderr-only, so stdout carries protocol frames and nothing
+else.
 
-- Constructing an SDK client blocks **425–1213 ms** — a 21–61x overrun. Clients
-  are warmed synchronously at composition, *before* the first tick, and re-warmed
-  off-thread by a background keeper. The tick thread never constructs.
-- Speech is `put_nowait` on a depth-2 bounded queue with a worker doing synthesis
-  and playback. A full queue, a wedged TTS or a dead speaker is a **named drop**,
-  never backpressure.
-- Export legs (`audio_tee.py`, `clip_rider.py`) are O(1) on the tick thread — a
-  timestamp and a bounded append; no socket I/O, no encoding, no filesystem.
-  Measured: 0 overrun ticks with no consumer, an active one, or a *wedged* one.
-- Audio is drained by a background pump at production pace, not pulled at tick
-  rate (a pulled FIFO serves seconds-stale audio and blocks 20 ms on empty).
+**The decision provider is the seam-driver shape the "constructing an SDK
+client blocks 425-1213ms" lesson demanded — issue #12:**
 
-**Every drop names its reason.** `senselog.stage` / `senselog.drop` emit one
-grep-able `[SENSE stage=<stage> source=<source> event=<event>] <detail>` line
-(`reachy_nova`'s `sensory_log.py` is the same idea, and the ancestor). A layer
-whose drops are invisible is indistinguishable from a layer that silently
-no-ops — so this is required, not optional, and it is stderr-only by
-construction so an export stdout stays pure JSONL.
+> The embedding/small-model "fast path" is a seam driver (`internal/provider`)
+> that each tick reads the sense snapshot, enqueues a request on a depth-2
+> bounded channel, and returns; a worker goroutine performs the HTTP call
+> under a timeout and writes the result into the sense snapshot as fields the
+> adaptor config separately declares as senses. A rule fires on the tick
+> *after* the result lands, never the same tick. Queue full, timeout, HTTP
+> error, malformed body, or no provider configured are named senselog drops.
+> This keeps the rules schema free of any provider concept, keeps the tick
+> thread free of I/O, and makes "no provider on this box" a plain absent
+> field a rule abstains on — the alternative, a `provider:` predicate op,
+> would have put a network call inside predicate evaluation.
 
 ### Validate fail-closed
 
-An unknown field, an out-of-range axis, a non-numeric value or a runaway duration
-is **refused, never clamped** (`goto_intent.py`; `MAX_DURATION_S = 10.0`, per-axis
-bounds as module constants). Same for a rule's `say` (capped, refused, never
-truncated). A robot that quietly reinterprets a bad command is worse than one
-that says no.
+Unchanged: an unknown field, an out-of-domain param, a malformed trajectory or
+a runaway `duration_s` is refused at load, never clamped
+(`internal/adaptor.Vocabulary.ValidateParams`, `internal/rules`'s validators).
+A `say` string over `MaxSayChars` (500) is refused, never truncated.
 
-### Two lessons that cost real time — do not re-learn them
+### Two lessons that still apply — not yet exercised by this engine
 
-- **An energy predicate is a LOCATOR, never a content filter.** It may say *when*
-  to start listening; it may never decide *which audio is worth keeping*. The
-  donor gated individual chunks on RMS, excising every stop closure inside a
-  sentence — `'Richie, are you there?'` became `'Reaching there.'` then
-  `'Return.'` as the room got louder. The threshold constant was cited from
-  `reachy_nova` and quietly repurposed from locator to filter across the port.
-  **When you port a constant, port what the donor used it for.**
+Audio-domain senses (loudness gating, pat/proprioception detection) have not
+been ported here; when they are, these two donor lessons apply unchanged:
+
+- **An energy predicate is a LOCATOR, never a content filter.** It may say
+  *when* to start listening; it may never decide *which* audio is worth
+  keeping — the donor gated individual chunks on RMS and excised speech mid-
+  sentence when a threshold was quietly repurposed from locator to filter.
+  When you port a constant, port what the donor used it for.
 - **Unit names must never be silently reinterpreted.** A per-tick epsilon
-  respecified in deg/s got a new variable name (`REACHY_PAT_STILL_EPS` →
-  `..._DEG_S`) and the old one is *ignored with a named log line*, not
-  reinterpreted. Cadence-dependent tunings are a bug class of their own: the
-  library must work at tick rates other than 50 Hz.
-- Related: pat detection is **ownership-gated** (suspends while the engine owns
-  the head, so commanded motion can't read as a phantom pat) and
-  **stillness-gated** (a velocity tolerance, not exact constancy). The
-  separation between a pat and the noise floor is 12–20x with the head still
-  and 0.7–2.0x while it wanders — so a moving robot declines to guess. Shipped
-  thresholds move **together or not at all**.
+  respecified in deg/s must get a new variable name, with the old one ignored
+  via a named log line, never reinterpreted. Cadence-dependent tunings are a
+  bug class of their own: a tuning that only works at one tick rate is a bug,
+  since `--period` is a real flag here, not an assumption.
+
+### Data trajectories instead of a motion library
+
+The design brief's "behaviors are pure functions of behavior-local time,"
+`library.py`-style, is now `internal/adaptor.Trajectory`: keyframes or a
+closed-form easing (`linear`, `ease_in_out`, `hold`), declared per claimed
+channel in the adaptor config — data, not Go code. **Nothing here ports the
+donors' actual motion**: `feel-alive`'s breathing, `pet-reaction`'s settle,
+`orient-to-sound`'s graded ladder, and MicroDuck's `_contribute_*` functions
+all stay in the donors, which is why the conformance suite
+([`docs/verification/2026-09-05-donor-conformance.md`](docs/verification/2026-09-05-donor-conformance.md))
+deliberately does not compare pose *values* — only events, ownership and pose
+completeness.
+
+### The guard exemptions — issues #6 and #13
+
+Two narrow, explicit exemption lists keep the no-donor-literal guard from
+either producing false positives or forcing an ugly workaround, and both are
+closed lists a reviewer can read in one sitting:
+
+> **Issue #6.** The guard originally matched donor names as *substrings*,
+> which caught TOML schema keywords (`enabled`, `active_mode`) and English
+> prose coincidentally matching MicroDuck's `mode`/`move` or Reachy's `speak`.
+> Fixed: whole-literal equality only, minus an explicit exemption list
+> (`internal/adaptor/testdata/schema_keywords.txt`: `enabled`, `mode`,
+> `active_mode`, each with a one-line justification). No channel or action
+> name may ever be exempted.
+>
+> **Issue #13.** The wire token `"pose"` collides with MicroDuck's `pose`
+> channel name. Rather than derive the constant via reflection (correct but
+> unreadable), a second, deliberately narrow exemption list
+> (`internal/adaptor/testdata/protocol_tokens.txt`) carries wire frame-kind
+> tokens *only*, so `internal/stream.KindPose` can be a plain, grep-able
+> constant. Channel and action names stay non-exemptable on this list too.
 
 ### What stays in the consumer, not here
 
-The donor's hardest constraint is **hardware ownership**, and it is the consumer's
-problem by definition:
-
-- **One SDK client, one single-consumer media session, one head.** Two sense
-  processes contend and the loser throttles to ~1 Hz. Hence: compose every sense
-  onto ONE tick seam, never as two processes.
-- **Cross-process arbitration is a heartbeat, not a flag file.** A flag cannot
-  expire; the engine's `state.json` heartbeat does. A foreground verb beside a
-  live engine should be a clean exit-1 refusal (`behavior/liveness.py`), not a
-  silently useless process.
-
-So the library defines the seams — `TargetSink`, `SenseProviders`,
-`speech(text)`, `media_session_provider`, `start_pose_provider` — and the robot
-CLI supplies every concrete implementation, holds every client, and owns the
-process supervision, the command spool paths, and the state dir. **If a module
-here imports a robot SDK, a transport, or a CLI error type, the extraction went
-wrong.** (The donor's `behavior/` still imports `reachy.cli._errors` in 11 files
-and `reachy.daemon` in 5 — those imports are exactly the seam work this repo
-exists to do.)
+Unchanged, and now enforced by what the engine literally cannot do: it has no
+SDK client, no media session, and no process supervision. `internal/compose`
+is the composition root and the *only* package allowed to import every other
+one; nothing here imports a robot SDK, a transport beyond the endpoint, or a
+CLI error type belonging to a consumer. The seams a consumer implements are:
+`adaptor.Sink` (where a pose goes), the stream's socket or stdio endpoint (how
+senses come in and poses go out), and — per the
+[safety boundary](README.md#safety-boundary) — the actual motor-control
+surface, since this engine performs no motor-level collision or limit check
+of its own.
 
 ### Dependency policy
 
@@ -370,17 +474,33 @@ on their side, in their own PRs, on their own schedule (frame decision c31 in
 ## Layout
 
 ```text
-neurosymbolic_system/   agent-first CLI (cited from teken's python-cli reference)
-  cli/                  parser, error/output contract, _commands/ (verbs)
-  explain/              markdown catalog for `explain`
-tests/                  pytest smoke + introspection tests
-.claude/skills/         vendored guildmaster skill kit (cite-don't-import)
-docs/skill-sources.md   skill provenance ledger
-culture.yaml            mesh identity (suffix + backend)
-.github/workflows/      tests + deploy (PyPI Trusted Publishing)
+cmd/neurosymbolic-engine/  the Go engine's entry point (main.go — thin, see its own doc comment)
+internal/
+  adaptor/                  robot vocabulary: channels, senses, actions, trajectories (JSON + TOML)
+  rules/                    react/inhibit/modes/event schema + layered loader — data only
+  ruleeval/                 predicate evaluation + the one admission registry
+  sense/                    per-tick Snapshot/SenseSink shape
+  tick/                     arbitration + composition — the engine core, pure
+  stream/                   wire endpoint: unix socket / stdio, frame codec, backpressure
+  events/                   event routing metadata — never feeds arbitration
+  provider/                 OpenAI-compatible decision-provider seam driver
+  senselog/                 the "[SENSE stage=...]" stderr grammar
+  mgmt/                     one-shot verbs, shared by argv and the stream's mgmt frames
+  clifmt/                   CLI error/output contract
+  compose/                  composition root — the only package that may import all the others
+  bench/                    synthetic tick-load benchmark
+  conformance/              donor-derived replay fixtures
+  allowlist/                the dependency-graph guard (see docs/go-dependencies.md)
+neurosymbolic_system/       agent-first CLI (cited from teken's python-cli reference)
+  cli/                      parser, error/output contract, _commands/ (verbs incl. engine, rules)
+  engine_client.py          stdlib subprocess client for the built binary
+  explain/                  markdown catalog for `explain`
+tests/                      pytest suites, incl. tests/toy_robot/ (third-plant fixture + e2e test)
+.claude/skills/              vendored guildmaster skill kit (cite-don't-import)
+docs/verification/           bench + conformance evidence records
+docs/handoff/                draft hand-off issue bodies for the three consumer repos
+docs/skill-sources.md        skill provenance ledger
+culture.yaml                 mesh identity (suffix + backend)
+go.mod / go.sum / vendor/    the Go module and its one vendored dependency
+.github/workflows/           Python tests+deploy, and the Go build/test/static-link matrix
 ```
-
-The runtime packages (`engine/`, `senses/`, `rules/`, `motion/` or whatever the
-first extraction PR names them) do not exist yet. When the first one lands, add
-it here and move the corresponding piece out of
-[The runtime being extracted](#the-runtime-being-extracted).
