@@ -29,9 +29,13 @@ reading the code without that context.
 Protocol versioning (spec h35)
 -------------------------------
 :data:`EXPECTED_PROTOCOL` is this client's expectation of the engine's wire
-protocol. ``neurosymbolic-engine version --json`` does not carry a
-``protocol`` field yet (a later task adds it); until it does,
-:func:`check_protocol` reports the absence as a warning, never a failure.
+protocol. ``neurosymbolic-engine version --json`` carries it as ``protocol``
+(t13, sourced on the Go side from ``internal/stream``'s ``Version``), so a
+skew between a client and an engine is named from a one-shot exec rather
+than discovered as a stream whose every frame comes back refused. An OLDER
+engine, built before that field existed, omits it; :func:`check_protocol`
+reports the absence as a warning, never a failure, so an upgrade in either
+direction degrades rather than breaks.
 """
 
 from __future__ import annotations

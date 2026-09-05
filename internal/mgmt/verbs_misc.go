@@ -9,17 +9,27 @@ import (
 
 	"github.com/agentculture/neurosymbolic-system/internal/clifmt"
 	"github.com/agentculture/neurosymbolic-system/internal/rules"
+	"github.com/agentculture/neurosymbolic-system/internal/stream"
 )
 
 // verbVersion reproduces exactly the "version" verb t1 shipped: one line,
 // "neurosymbolic-engine <version> (<revision>)".
+//
+// The JSON shape carries one field the text line does not: "protocol", the
+// stream endpoint's wire version. A consumer's client library reads it BEFORE
+// it ever opens a socket (neurosymbolic_system/engine_client.py's
+// check_protocol, spec h35), so a version skew is reported by name from a
+// one-shot exec instead of being discovered as a connection whose every frame
+// comes back refused. It is stream.Version itself, never a copy: two constants
+// that must agree and can drift are one constant with extra steps.
 func verbVersion(h *Handler, _ []string) (verbResult, error) {
 	text := fmt.Sprintf("neurosymbolic-engine %s (%s)", h.Version, h.Revision)
 	return verbResult{
 		Text: text,
-		Value: map[string]string{
+		Value: map[string]any{
 			"version":  h.Version,
 			"revision": h.Revision,
+			"protocol": stream.Version,
 		},
 	}, nil
 }
