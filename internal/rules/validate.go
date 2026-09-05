@@ -11,14 +11,24 @@ import (
 // The fixed declarative schema. Anything outside these sets is refused at every
 // level — no fn/code/source/exec/free-form fields, ever.
 var (
-	topLevelFields  = set("schema_version", "active_mode", "react", "inhibit", "modes")
+	topLevelFields = set(
+		"schema_version", "active_mode", "react", "inhibit", "modes", "event", "event_default",
+	)
 	reactFields     = set("id", "enabled", "when", "run", "params", "cooldown_s", "hysteresis", "duration_s", "say")
 	inhibitFields   = set("id", "enabled", "when", "disable", "cooldown_s", "hysteresis")
 	predicateFields = set("field", "op", "value")
 	groupFields     = set("all", "any")
 
-	reactRequired   = []string{"id", "run", "when"}
-	inhibitRequired = []string{"id", "disable", "when"}
+	eventFields = set(
+		"source", "type", "enabled", "priority", "urgency", "llm_evaluate",
+		"inject_template", "voice", "sense", "dedupe",
+	)
+	eventDefaultFields = set("priority", "urgency", "llm_evaluate", "voice")
+
+	reactRequired        = []string{"id", "run", "when"}
+	inhibitRequired      = []string{"id", "disable", "when"}
+	eventRequired        = []string{"source", "type", "priority", "urgency"}
+	eventDefaultRequired = []string{"priority", "urgency"}
 )
 
 // file is one parsed-and-validated rules file: its ordered rules (react and
@@ -31,6 +41,9 @@ type file struct {
 	disabled      []string
 	modes         map[string]map[string]float64
 	activeMode    string
+	events        []Event
+	eventDisabled []string
+	eventDefault  *EventDefault
 }
 
 // validate turns one decoded TOML document into a validated file.
@@ -88,6 +101,36 @@ func validate(path string, data map[string]any) (*file, error) {
 	if f.activeMode, err = validateActiveMode(c, data["active_mode"], f.modes); err != nil {
 		return nil, err
 	}
+
+	if raw, present := data["event"]; present {
+		entries, ok := asMaps(raw)
+		if !ok {
+			return nil, c.errf(
+				"write it as an [[event]] array of tables",
+				"'event' must be a list of event tables",
+			)
+		}
+		for i, entry := range entries {
+			event, tombstone, err := validateEvent(c, i, entry)
+			if err != nil {
+				return nil, err
+			}
+			if tombstone != "" {
+				f.eventDisabled = append(f.eventDisabled, tombstone)
+				continue
+			}
+			event.Path = path
+			f.events = append(f.events, *event)
+		}
+	}
+	if err := checkDuplicateEventIDs(c, f); err != nil {
+		return nil, err
+	}
+
+	if f.eventDefault, err = validateEventDefault(c, data["event_default"]); err != nil {
+		return nil, err
+	}
+
 	return f, nil
 }
 
@@ -593,6 +636,238 @@ func validateActiveMode(c ctx, raw any, modes map[string]map[string]float64) (st
 		return "", c.errf(fix, "'active_mode' %v is not a defined mode", raw)
 	}
 	return name, nil
+}
+
+// validateEvent validates one [[event]] entry. It returns either an event, or
+// the "source/type" id of a tombstone (enabled = false).
+func validateEvent(c ctx, index int, raw map[string]any) (*Event, string, error) {
+	label := fmt.Sprintf("event[%d]", index)
+	source, sourceOK := raw["source"].(string)
+	eventType, typeOK := raw["type"].(string)
+	if sourceOK && strings.TrimSpace(source) != "" && typeOK && strings.TrimSpace(eventType) != "" {
+		label = source + "/" + eventType
+	}
+	rc := c.event(label)
+
+	if unknown := unknownKeys(raw, eventFields); len(unknown) > 0 {
+		return nil, "", rc.errf(
+			"allowed fields: "+sortedKeys(eventFields),
+			"has unexpected field(s) %s", quoteList(unknown),
+		)
+	}
+
+	tombstone, err := isTombstone(rc, raw)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if !sourceOK || strings.TrimSpace(source) == "" {
+		return nil, "", rc.errf("give the event a non-empty string source",
+			"'source' must be a non-empty string (got %v)", raw["source"])
+	}
+	if !typeOK || strings.TrimSpace(eventType) == "" {
+		return nil, "", rc.errf("give the event a non-empty string type",
+			"'type' must be a non-empty string (got %v)", raw["type"])
+	}
+	id := source + "/" + eventType
+
+	// A tombstone is validated only for what still means something on a
+	// disabled entry — source/type and no unknown fields, same as a rule.
+	if tombstone {
+		return nil, id, nil
+	}
+
+	var missing []string
+	for _, key := range eventRequired {
+		if _, present := raw[key]; !present {
+			missing = append(missing, key)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		return nil, "", rc.errf(
+			"an event requires: "+strings.Join(eventRequired, ", "),
+			"is missing required field(s) %s", quoteList(missing),
+		)
+	}
+
+	priority, err := requiredEnum(rc, raw, "priority", priorities)
+	if err != nil {
+		return nil, "", err
+	}
+	urgency, err := requiredEnum(rc, raw, "urgency", urgencies)
+	if err != nil {
+		return nil, "", err
+	}
+	llmEvaluate, err := optionalBool(rc, raw, "llm_evaluate", DefaultLLMEvaluate)
+	if err != nil {
+		return nil, "", err
+	}
+	voice, err := optionalEnum(rc, raw, "voice", voices, DefaultVoice)
+	if err != nil {
+		return nil, "", err
+	}
+	injectTemplate, err := optionalString(rc, raw, "inject_template")
+	if err != nil {
+		return nil, "", err
+	}
+	sense, err := optionalString(rc, raw, "sense")
+	if err != nil {
+		return nil, "", err
+	}
+	dedupe, err := optionalString(rc, raw, "dedupe")
+	if err != nil {
+		return nil, "", err
+	}
+
+	return &Event{
+		Source:         source,
+		Type:           eventType,
+		Priority:       priority,
+		Urgency:        urgency,
+		LLMEvaluate:    llmEvaluate,
+		InjectTemplate: injectTemplate,
+		Voice:          voice,
+		Sense:          sense,
+		Dedupe:         dedupe,
+	}, "", nil
+}
+
+// validateEventDefault validates the optional [event_default] table.
+func validateEventDefault(c ctx, raw any) (*EventDefault, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	table, ok := raw.(map[string]any)
+	if !ok {
+		return nil, c.errf(
+			"write [event_default] with priority, urgency, and optionally "+
+				"llm_evaluate and voice",
+			"'event_default' must be a table (got %v)", raw,
+		)
+	}
+	if unknown := unknownKeys(table, eventDefaultFields); len(unknown) > 0 {
+		return nil, c.errf(
+			"allowed fields: "+sortedKeys(eventDefaultFields),
+			"'event_default' has unexpected field(s) %s", quoteList(unknown),
+		)
+	}
+	var missing []string
+	for _, key := range eventDefaultRequired {
+		if _, present := table[key]; !present {
+			missing = append(missing, key)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		return nil, c.errf(
+			"'event_default' requires: "+strings.Join(eventDefaultRequired, ", "),
+			"'event_default' is missing required field(s) %s", quoteList(missing),
+		)
+	}
+	priority, err := requiredEnum(c, table, "priority", priorities)
+	if err != nil {
+		return nil, err
+	}
+	urgency, err := requiredEnum(c, table, "urgency", urgencies)
+	if err != nil {
+		return nil, err
+	}
+	llmEvaluate, err := optionalBool(c, table, "llm_evaluate", DefaultLLMEvaluate)
+	if err != nil {
+		return nil, err
+	}
+	voice, err := optionalEnum(c, table, "voice", voices, DefaultVoice)
+	if err != nil {
+		return nil, err
+	}
+	return &EventDefault{Priority: priority, Urgency: urgency, LLMEvaluate: llmEvaluate, Voice: voice}, nil
+}
+
+// requiredEnum reads a required string field and checks it against domain.
+func requiredEnum(c ctx, raw map[string]any, name string, domain map[string]bool) (string, error) {
+	value, ok := raw[name].(string)
+	if !ok || !domain[value] {
+		return "", c.errf(
+			"use one of: "+sortedKeys(domain),
+			"'%s' %v is not one of: %s", name, raw[name], sortedKeys(domain),
+		)
+	}
+	return value, nil
+}
+
+// optionalEnum reads an optional string field against domain, defaulting to
+// def when absent.
+func optionalEnum(c ctx, raw map[string]any, name string, domain map[string]bool, def string) (string, error) {
+	value, present := raw[name]
+	if !present || value == nil {
+		return def, nil
+	}
+	text, ok := value.(string)
+	if !ok || !domain[text] {
+		return "", c.errf(
+			"use one of: "+sortedKeys(domain),
+			"'%s' %v is not one of: %s", name, value, sortedKeys(domain),
+		)
+	}
+	return text, nil
+}
+
+// optionalBool reads an optional boolean field, defaulting to def when absent.
+func optionalBool(c ctx, raw map[string]any, name string, def bool) (bool, error) {
+	value, present := raw[name]
+	if !present || value == nil {
+		return def, nil
+	}
+	b, ok := value.(bool)
+	if !ok {
+		return false, c.errf(
+			fmt.Sprintf("use a boolean for '%s'", name),
+			"'%s' must be a boolean (got %v)", name, value,
+		)
+	}
+	return b, nil
+}
+
+// optionalString reads an optional non-empty string field, empty when absent.
+func optionalString(c ctx, raw map[string]any, name string) (string, error) {
+	value, present := raw[name]
+	if !present || value == nil {
+		return "", nil
+	}
+	text, ok := value.(string)
+	if !ok || strings.TrimSpace(text) == "" {
+		return "", c.errf(
+			fmt.Sprintf("give '%s' a non-empty string, or remove the field entirely", name),
+			"'%s' must be a non-empty string (got %v)", name, value,
+		)
+	}
+	return text, nil
+}
+
+// checkDuplicateEventIDs refuses two events (live or tombstoned) sharing a
+// "source/type" identity within the SAME file — exactly the rule-id check,
+// applied to the event namespace.
+func checkDuplicateEventIDs(c ctx, f *file) error {
+	seen := map[string]bool{}
+	for _, id := range append(eventIDs(f.events), f.eventDisabled...) {
+		if seen[id] {
+			return c.event(id).errf(
+				"rename one of them — every event source/type must be unique across the file",
+				"duplicate event in %s", f.path,
+			)
+		}
+		seen[id] = true
+	}
+	return nil
+}
+
+func eventIDs(events []Event) []string {
+	out := make([]string, len(events))
+	for i, e := range events {
+		out[i] = e.ID()
+	}
+	return out
 }
 
 func checkDuplicateIDs(c ctx, f *file) error {

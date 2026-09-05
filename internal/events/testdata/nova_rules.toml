@@ -1,0 +1,458 @@
+# TRANSCRIPTION (t6), not the source of truth. Hand-transcribed from
+# reachy_nova's config/nervous-system/rules.yaml
+# (../../../../reachy_nova/config/nervous-system/rules.yaml as read from this
+# worktree) into this repo's [[event]]/[event_default] TOML dialect
+# (internal/rules), by neurosymbolic-system's t6 agent, 2026-09-05.
+#
+# Field mapping, verbatim from the donor's own header comments:
+#   default:            -> [event_default]
+#   rules.<source/type>: -> one [[event]] table with source/type split on "/"
+#   priority/urgency/llm_evaluate/inject_template/voice/sense/dedupe ->
+#     identically named fields (see internal/rules/model.go's doc comment)
+#
+# INFORMATION LOST IN THIS TRANSCRIPTION:
+#
+#   The three per-rule OVERRIDE keys the donor keys as "<source>/<type>:<rule
+#   id>" — "rule/fire:pat-acknowledge", "rule/fire:nova-face-noticed" and
+#   "rule/fire:nova-pat-cheer" — are OMITTED here, not merely disabled. This
+#   schema's event identity is exactly "source/type" (t6's design, see
+#   internal/rules/model.go's Event.ID) with no third "/<rule>" component, so
+#   the donor's payload-conditional override — reachy_nova/harness/bus.py's
+#   rule_for() picks the "<source>/<type>:<rule>" entry over the generic
+#   "<source>/<type>" one when payload["rule"] names it — cannot be
+#   represented: an internal/events.Router resolves purely on
+#   Event.Source/Event.Type, never on payload contents. The generic
+#   "rule/fire" entry below (voice = "silent") is transcribed in full; the
+#   three overrides' more specific inject_template/voice/sense/dedupe text
+#   is lost with them. A future task that wants that behavior back needs a
+#   genuine schema extension (a third routing key component), not a config
+#   change here.
+schema_version = 1
+
+[event_default]
+priority = "NORMAL"
+urgency = "DEFERRABLE"
+llm_evaluate = true
+voice = "free"
+
+# --- Tracking events ---
+
+[[event]]
+source = "tracking"
+type = "snap_detected"
+priority = "HIGH"
+urgency = "IMMEDIATE"
+llm_evaluate = false
+inject_template = "You heard a sharp snap nearby."
+
+[[event]]
+source = "tracking"
+type = "person_detected"
+priority = "NORMAL"
+urgency = "NOW"
+llm_evaluate = true
+inject_template = "Someone just came into view."
+
+[[event]]
+source = "tracking"
+type = "person_lost"
+priority = "LOW"
+urgency = "DEFERRABLE"
+llm_evaluate = false
+inject_template = "The person you were looking at walked away."
+
+[[event]]
+source = "tracking"
+type = "mode_changed"
+priority = "LOW"
+urgency = "BACKGROUND"
+llm_evaluate = false
+
+[[event]]
+source = "tracking"
+type = "face_recognized"
+priority = "NORMAL"
+urgency = "NOW"
+llm_evaluate = false
+inject_template = "You notice {name} is here."
+
+[[event]]
+source = "tracking"
+type = "pat_level1"
+priority = "LOW"
+urgency = "BACKGROUND"
+llm_evaluate = false
+
+[[event]]
+source = "tracking"
+type = "pat_level2"
+priority = "LOW"
+urgency = "BACKGROUND"
+llm_evaluate = false
+
+[[event]]
+source = "tracking"
+type = "audio_direction"
+priority = "LOW"
+urgency = "BACKGROUND"
+llm_evaluate = false
+
+# --- Speech events ---
+
+[[event]]
+source = "speech"
+type = "speech_detected"
+priority = "NORMAL"
+urgency = "NOW"
+llm_evaluate = false
+inject_template = "You just heard: {transcript}"
+
+# --- Face events ---
+
+[[event]]
+source = "face"
+type = "face_recognized"
+priority = "NORMAL"
+urgency = "NOW"
+llm_evaluate = false
+inject_template = "You notice {name} is here."
+
+# --- Vision events ---
+
+[[event]]
+source = "vision"
+type = "vision_description"
+priority = "NORMAL"
+urgency = "NOW"
+llm_evaluate = true
+inject_template = "Right now you see: {description}"
+
+[[event]]
+source = "vision"
+type = "analysis_started"
+priority = "LOW"
+urgency = "BACKGROUND"
+llm_evaluate = false
+
+# --- Slack events ---
+
+[[event]]
+source = "slack"
+type = "slack_mention"
+priority = "HIGH"
+urgency = "IMMEDIATE"
+llm_evaluate = false
+inject_template = "{user} just mentioned you on Slack: {text}"
+
+[[event]]
+source = "slack"
+type = "slack_message"
+priority = "NORMAL"
+urgency = "NOW"
+llm_evaluate = true
+inject_template = "New Slack message from {user}: {text}"
+
+[[event]]
+source = "slack"
+type = "slack_dm"
+priority = "HIGH"
+urgency = "IMMEDIATE"
+llm_evaluate = false
+inject_template = "{user} sent you a direct message on Slack: {text}"
+
+[[event]]
+source = "slack"
+type = "slack_reaction"
+priority = "LOW"
+urgency = "BACKGROUND"
+llm_evaluate = false
+
+# --- Browser events ---
+
+[[event]]
+source = "browser"
+type = "task_completed"
+priority = "NORMAL"
+urgency = "NOW"
+llm_evaluate = false
+inject_template = "You found this: {result}"
+
+[[event]]
+source = "browser"
+type = "progress"
+priority = "LOW"
+urgency = "DEFERRABLE"
+llm_evaluate = false
+inject_template = "Still looking... {message}"
+
+[[event]]
+source = "browser"
+type = "task_started"
+priority = "LOW"
+urgency = "BACKGROUND"
+llm_evaluate = false
+
+# --- Memory events ---
+
+[[event]]
+source = "memory"
+type = "query_result"
+priority = "NORMAL"
+urgency = "NOW"
+llm_evaluate = false
+inject_template = "You remember: {result}"
+
+[[event]]
+source = "memory"
+type = "store_result"
+priority = "LOW"
+urgency = "BACKGROUND"
+llm_evaluate = false
+
+[[event]]
+source = "memory"
+type = "startup_context"
+priority = "NORMAL"
+urgency = "NOW"
+llm_evaluate = false
+inject_template = "Things you know: {context}"
+
+[[event]]
+source = "memory"
+type = "context"
+priority = "NORMAL"
+urgency = "DEFERRABLE"
+llm_evaluate = false
+inject_template = "Something you know: {text}"
+
+[[event]]
+source = "memory"
+type = "result"
+priority = "NORMAL"
+urgency = "NOW"
+llm_evaluate = false
+inject_template = "You remember: {text}"
+
+# --- Emotion events ---
+
+[[event]]
+source = "emotions"
+type = "wound_created"
+priority = "HIGH"
+urgency = "NOW"
+llm_evaluate = false
+inject_template = "That really hurt."
+
+[[event]]
+source = "emotions"
+type = "wound_healed"
+priority = "NORMAL"
+urgency = "DEFERRABLE"
+llm_evaluate = false
+
+[[event]]
+source = "emotions"
+type = "mood_changed"
+priority = "LOW"
+urgency = "BACKGROUND"
+llm_evaluate = false
+
+# --- Heartbeat ---
+
+[[event]]
+source = "heartbeat"
+type = "tick"
+priority = "LOW"
+urgency = "BACKGROUND"
+llm_evaluate = false
+
+# --- Skill-forge events ---
+
+[[event]]
+source = "forge"
+type = "staged"
+priority = "LOW"
+urgency = "BACKGROUND"
+llm_evaluate = false
+
+[[event]]
+source = "forge"
+type = "activated"
+priority = "LOW"
+urgency = "BACKGROUND"
+llm_evaluate = false
+
+[[event]]
+source = "forge"
+type = "rejected"
+priority = "NORMAL"
+urgency = "NOW"
+llm_evaluate = false
+inject_template = "A new skill idea didn't pass its safety check: {reason}"
+
+# --- Runtime bus events (reachy-mini-cli's symbolic runtime) ---
+
+[[event]]
+source = "sense"
+type = "snapshot"
+priority = "LOW"
+urgency = "BACKGROUND"
+llm_evaluate = false
+
+[[event]]
+source = "rule"
+type = "fire"
+priority = "NORMAL"
+urgency = "NOW"
+llm_evaluate = false
+voice = "silent"
+inject_template = "(body cue: {rule})"
+
+# NOTE: the donor's "rule/fire:pat-acknowledge", "rule/fire:nova-face-noticed"
+# and "rule/fire:nova-pat-cheer" per-rule overrides are OMITTED here — see the
+# file header's "INFORMATION LOST" note.
+
+[[event]]
+source = "rule"
+type = "suppress"
+priority = "LOW"
+urgency = "BACKGROUND"
+llm_evaluate = false
+
+[[event]]
+source = "intent"
+type = "declare"
+priority = "LOW"
+urgency = "BACKGROUND"
+llm_evaluate = false
+
+[[event]]
+source = "intent"
+type = "update"
+priority = "LOW"
+urgency = "BACKGROUND"
+llm_evaluate = false
+
+[[event]]
+source = "intent"
+type = "clear"
+priority = "LOW"
+urgency = "BACKGROUND"
+llm_evaluate = false
+
+[[event]]
+source = "intent"
+type = "applied"
+priority = "NORMAL"
+urgency = "DEFERRABLE"
+llm_evaluate = false
+voice = "none"
+inject_template = "Your standing intention '{name}' is now in effect."
+
+[[event]]
+source = "intent"
+type = "blocked"
+priority = "NORMAL"
+urgency = "NOW"
+llm_evaluate = false
+voice = "none"
+dedupe = "reflex-held"
+inject_template = "(a body reflex was held back)"
+
+[[event]]
+source = "motion"
+type = "admit"
+priority = "LOW"
+urgency = "BACKGROUND"
+llm_evaluate = false
+
+[[event]]
+source = "motion"
+type = "evict"
+priority = "LOW"
+urgency = "BACKGROUND"
+llm_evaluate = false
+
+[[event]]
+source = "motion"
+type = "goto"
+priority = "LOW"
+urgency = "BACKGROUND"
+llm_evaluate = false
+
+# --- Runtime pat/face/vision events (t7) ---
+
+[[event]]
+source = "pat"
+type = "level1"
+priority = "NORMAL"
+urgency = "NOW"
+llm_evaluate = false
+voice = "brief"
+sense = "pat"
+inject_template = "(someone is patting you gently)"
+
+[[event]]
+source = "pat"
+type = "level2"
+priority = "NORMAL"
+urgency = "NOW"
+llm_evaluate = false
+voice = "brief"
+sense = "pat"
+inject_template = "(someone is patting you more firmly)"
+
+[[event]]
+source = "pat"
+type = "detected"
+priority = "NORMAL"
+urgency = "NOW"
+llm_evaluate = false
+voice = "brief"
+sense = "pat"
+inject_template = "(someone is touching you)"
+
+[[event]]
+source = "face"
+type = "recognized"
+priority = "NORMAL"
+urgency = "NOW"
+llm_evaluate = false
+inject_template = "You notice {name} is here."
+
+[[event]]
+source = "face"
+type = "unknown"
+priority = "LOW"
+urgency = "DEFERRABLE"
+llm_evaluate = false
+inject_template = "You notice someone you don't recognize."
+
+[[event]]
+source = "vision"
+type = "description"
+priority = "NORMAL"
+urgency = "NOW"
+llm_evaluate = true
+inject_template = "Right now you see: {description}"
+
+# --- Gaze-lock lifecycle (t13) ---
+
+[[event]]
+source = "motion"
+type = "face-lost"
+priority = "NORMAL"
+urgency = "NOW"
+llm_evaluate = false
+voice = "brief"
+sense = "face"
+inject_template = "(the person you were watching is out of view)"
+
+[[event]]
+source = "motion"
+type = "lock-released"
+priority = "NORMAL"
+urgency = "NOW"
+llm_evaluate = false
+voice = "silent"
+inject_template = "(you stopped following the person: {reason})"
