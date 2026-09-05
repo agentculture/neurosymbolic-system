@@ -151,3 +151,39 @@ unless a different commit is named.
 - Wire-protocol tokens and rules-schema keywords are guard exemptions; a stricter scoping (schema keys as named constants in one file) is a small follow-up (issue #6).
 - arm64 CI leg under QEMU is unverified until a real Actions run; the local arm64 box is the only measured target.
 - Provider latency and memory behind a real on-device model remain parked (frame v1); the bench measured the engine alone.
+
+## Review round (after the summary was written)
+
+PR #16's automated review left 21 inline threads. All are answered and
+resolved: 18 fixed in `6abfcfa`, `f2270c3`, `dc3a458`, `b7048e6`; 3 pushed
+back citing the spec (the branch prefix; two requests for per-tick drop lines
+where c15 requires per-episode logging). Behaviour that changed after head
+`743ace9`, in the order a consumer would notice:
+
+- stream: every inbound frame kind is decoded strictly (unknown field refused
+  naming it); a client name over 64 bytes is refused, not truncated;
+  management verbs in flight are bounded per session (default 4, refusal
+  `mgmt-busy`); the tick path enqueues payloads and the writer encodes; the
+  queued-frame accounting is race-free against shutdown; the hello reply
+  precedes any telemetry and every tick after the greeting is delivered.
+- tick: an explicit behavior id already active is refused (`duplicate-id`).
+- senselog: `detail` is sanitized; `Parse` refuses control characters.
+- rules: a `source/type` field of a declared `[[event]]` entry is a valid
+  predicate field independent of the vocabulary (`is_true` / `is_false` /
+  `absent_for` only).
+- mgmt: `rules migrate` writes a temp file, verifies it, renames; never
+  truncates or deletes the destination; rewrites only the top-level
+  `schema_version`; verification compares the whole loaded config.
+  `neurosymbolic-engine` with no command, or a noun with no sub-verb, emits
+  the two-line error contract; a `help` verb prints usage with exit 0.
+- compose: a first SIGTERM restores default disposition so a second one
+  terminates; a written non-positive `timeout_s` / `queue_depth` / `cadence`
+  is refused; JSON loaders refuse trailing data.
+- Python: `DEFAULT_TIMEOUT_S`; every launch `OSError` is an environment
+  `CliError`; a malformed error `code` falls back to the client-authored
+  error; every verb has an `explain` entry, pinned by a parser-walk test.
+
+CI on `b7048e6`: all checks green including arm64 under QEMU; SonarCloud
+quality gate OK with 0 open issues; 21 of 21 threads resolved. The
+`.devague` evidence records still cite the `743ace9` run; the review-round
+tests ran in the same gates and are listed here rather than re-filed.
