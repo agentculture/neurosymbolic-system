@@ -111,6 +111,12 @@ var (
 // Comparators is the full set of valid predicate ops.
 var Comparators = union(orderedOps, equalityOps, booleanOps, durationOps)
 
+// eventFieldOps are the ops a predicate on an [[event]] entry's
+// "<source>/<type>" field may use. An event field is present-and-true for
+// exactly one tick or absent — there is no ordering and no second value to
+// compare against, so these three ops are the whole of its semantics.
+var eventFieldOps = union(booleanOps, durationOps)
+
 // Vocabulary is the OPTIONAL robot-specific name check. A nil Vocabulary means
 // names go unchecked, which is what lets a `rules check` verb validate a file's
 // shape with no robot present. The interface is declared here, and takes no

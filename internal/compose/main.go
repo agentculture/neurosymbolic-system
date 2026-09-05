@@ -5,8 +5,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/agentculture/neurosymbolic-system/internal/clifmt"
 )
@@ -22,6 +20,15 @@ import (
 // left to the default disposition — an operator who asks twice gets the abrupt
 // stop they asked for, and a shutdown that could not be interrupted would be
 // its own kind of wedge.
+//
+// That second half is why the handler is uninstalled the INSTANT the first
+// signal arrives, rather than when Run returns. signal.NotifyContext keeps its
+// handler installed for the whole life of the context, so every signal that
+// lands during a graceful shutdown is swallowed by a context that is already
+// cancelled: an operator watching a wedged settle press Ctrl-C again and
+// again would see nothing happen, and the one escape left would be SIGKILL
+// from another terminal. Restoring the default disposition first makes the
+// second signal do exactly what the doc above promises.
 //
 // A SIGKILL, by construction, does none of that. That is why the endpoint has a
 // heartbeat at all: a consumer that sees no beat for two intervals settles its
@@ -40,8 +47,8 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer, build Build)
 	// client — is released here, on every exit path including a refused run.
 	defer runtime.Close()
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+	ctx, stopSignals := notifyFirstStopSignal(context.Background(), stderr)
+	defer stopSignals()
 
 	if err := runtime.Run(ctx); err != nil {
 		return renderError(err, stderr)

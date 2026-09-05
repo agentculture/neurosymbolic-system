@@ -179,6 +179,16 @@ func parse(data []byte, origin string) (*Vocabulary, error) {
 		return nil, newError(origin, fmt.Sprintf("the config is not valid JSON (%v)", err),
 			"fix the document; unknown keys are refused as well as malformed syntax")
 	}
+	// A json.Decoder stops at the end of the first value, so a SECOND
+	// document — or any trailing garbage — would decode as if it were not
+	// there. An operator editing the half that is silently ignored would see
+	// no effect and no error, which is the same silent-no-op failure
+	// DisallowUnknownFields above exists to prevent.
+	if err := decodedToEOF(dec); err != nil {
+		return nil, newError(origin,
+			fmt.Sprintf("the config has trailing content after the JSON document (%v)", err),
+			"a config is exactly ONE JSON document; remove everything after it")
+	}
 
 	v := &Vocabulary{
 		origin:        origin,
