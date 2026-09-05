@@ -4,14 +4,14 @@
   "schema_version": 6,
   "status": "exported",
   "created": "2026-09-05T04:43:37Z",
-  "updated": "2026-09-05T05:35:09Z",
+  "updated": "2026-09-05T05:39:59Z",
   "claims": [
     {
       "id": "c1",
       "kind": "announcement",
       "text": "neurosymbolic-system ships as one static Go binary: the rule engine that powers rule-based CLI actions for any robot \u2014 event-based and tick-based rules from one or many TOML files, an optional embedding/small-model fast path, driven from Python by reachy-mini-cli, microduck-cli and arm101-cli through a thin stdlib client the way culture-nodes drives its Go control plane; each robot adds only adaptors and configuration",
       "origin": "user",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h16",
@@ -302,7 +302,13 @@
         {
           "id": "h10",
           "text": "Every suppression and every provider drop writes exactly one stderr line in the [SENSE stage=<stage> source=<source> event=<event>] grammar at streak entry, on reason change, and at streak end with the tick count; stdout carries nothing but results.",
-          "status": "confirmed",
+          "status": "rejected",
+          "instruction": ""
+        },
+        {
+          "id": "h37",
+          "text": "Every suppression and every provider drop writes exactly one stderr line in the SENSE grammar (stage, source and event as key=value pairs inside square brackets) at streak entry, on reason change, and at streak end with the tick count; stdout carries nothing but results.",
+          "status": "proposed",
           "instruction": ""
         }
       ],
@@ -400,7 +406,7 @@
       "kind": "boundary",
       "text": "The engine ships no motion primitives of its own: every action is adaptor-declared DATA \u2014 per claimed channel, a trajectory (keyframes or easing curve over behavior-local time t_local, with Param domains) that the engine samples into numeric channel values each tick. The donor's 39 LIBRARY entries and microduck's skills become such declarations on the consumer side, and the core renders nothing it was not handed as data.",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h22",
@@ -411,7 +417,7 @@
         {
           "id": "h36",
           "text": "The toy-robot adaptor declares an action as a keyframe trajectory on two channels; the engine's pose frames over its duration match the trajectory sampled at the tick period to within float tolerance, and an action declared without a trajectory for a channel it claims is refused at load.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -687,12 +693,12 @@
       "kind": "requirement",
       "text": "The schema carries the donor fields c11 omitted: [modes.<name>] parameter sets with a required active_mode when any mode is defined (rules.py, microduck refuses modes with no active_mode), per-rule params overrides validated against the action's declared domain, and a react rule's say text (MAX_SAY_CHARS = 500, refused never truncated) forwarded as data to a consumer-declared speech action \u2014 otherwise reachy's overlays do not 'load unchanged' (h6) and set-mode intents (c14) have nothing to select. [challenge / adjacent-systems lens: reachy/behavior/rules.py _REACT_FIELDS, _TOP_LEVEL_FIELDS; microduck rules.py active_mode refusal]",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h29",
           "text": "reachy's default_rules.toml plus a fixture overlay carrying [modes.*], active_mode, params overrides and a say string loads with every field preserved; a say over 500 chars, a params key outside the action's domain, and modes without active_mode are each refused naming the rule id.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -706,7 +712,7 @@
       "kind": "assumption",
       "text": "The engine ticks on its own clock regardless of frame arrival: a sense frame replaces the snapshot, a missing field is None, and the engine stamps per-field last-seen time itself so absent_for and *_age_s work without the consumer sending timestamps; no frame for N ticks means a stale snapshot with growing age, never a blocked or skipped tick. [challenge / data-flow lens: rule_engine.py absent_for per-field last-seen clock; sense.py *_age_s sampled once per tick; engine.py peek semantics]",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [],
       "hard_questions": [],
       "links": [],
@@ -718,12 +724,12 @@
       "kind": "requirement",
       "text": "The adaptor declares, per channel, the value shape (e.g. head = 6 floats, antennas = 2, body_yaw = 1) and the neutral value in the robot's friendly units; composition fills every unclaimed channel with the declared neutral, and a frame whose channel value has the wrong arity is refused. [challenge / overlooked-data lens: model.py neutral_head(), CHANNELS; the donor's mm/deg/s units converted once at the transport boundary]",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h30",
           "text": "The toy-robot adaptor declares three channels of arity 6, 2 and 1 with neutrals; a pose frame emitted with no active behavior equals the declared neutrals exactly, and a sink frame with arity 5 on the head channel is refused.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -737,12 +743,12 @@
       "kind": "requirement",
       "text": "Containment on disconnect: the stream protocol carries a heartbeat frame at a declared interval and an explicit end-of-stream frame on graceful stop; the adaptor guide requires the consumer to settle the robot to its declared neutral when the socket closes or the heartbeat lapses, mirroring the donor engine's settle-to-neutral on exit and its max_errors tolerance. [challenge / failure-mode + recovery lens: engine.py docstring 'settle-to-neutral on exit', EngineConfig.max_errors]",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h31",
           "text": "Killing the engine mid-stream delivers either an end-of-stream frame (SIGTERM) or a heartbeat lapse (SIGKILL) to the fixture consumer within two heartbeat intervals, and the fixture consumer's settle-to-neutral handler runs in both cases in the end-to-end test.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -756,8 +762,15 @@
       "kind": "boundary",
       "text": "The engine listens only on a unix socket (or stdio), never TCP by default; the socket is created 0600 inside a consumer-provided directory, so a second local user cannot inject intents or read poses. culture-nodes' :8080 TCP listener is a server-side precedent that does not transfer to a robot. [challenge / security lens: cmd/nodes/serve.go defaultListenAddr vs the on-device threat model]",
       "origin": "llm",
-      "status": "proposed",
-      "honesty_conditions": [],
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h38",
+          "text": "The engine refuses to start with a TCP listen address unless an explicit --insecure-tcp flag is passed; the created unix socket has mode 0600 and lives in the directory the consumer passed; a test asserts both and that no listener exists on any TCP port after startup.",
+          "status": "proposed",
+          "instruction": ""
+        }
+      ],
       "hard_questions": [],
       "links": [],
       "instruction": "",
@@ -768,12 +781,12 @@
       "kind": "requirement",
       "text": "The stream carries event frames beside pose frames \u2014 rule fired, rule suppressed (per-episode), ownership changed, intent admitted or evicted \u2014 with the same keys the donor emits through ctx.emit (EVENT_FIRE / EVENT_SUPPRESS), so an agent or export sink observes decisions structurally; stderr senselog is the human-readable twin, stdout stays clean. [challenge / observability lens: rule_engine.py ctx.emit + TickBus consumers; reachy/cli/_export.py JSONL feed]",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h32",
           "text": "Every rule fire, per-episode suppression, ownership change and intent admit/evict during the conformance replay appears as exactly one event frame on the stream with the donor's EVENT_FIRE / EVENT_SUPPRESS keys, and stdout of the engine process is empty.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -787,12 +800,12 @@
       "kind": "requirement",
       "text": "The loader never rewrites a rules file in place. Moving an overlay from schema_version 1 to 2 is an explicit rules migrate verb that writes a new file and keeps the original, because a v2 file no longer loads in either donor's Python engine and a box must be able to roll back to it. [challenge / migration + reversibility lens: microduck rules.py SCHEMA_VERSION = 1 single accepted value; reachy rules.py two-layer merge]",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h33",
           "text": "rules migrate on a schema-1 overlay writes <name>.v2.toml, leaves the original byte-identical, and the loader refuses any verb that would write to a path it was given as input.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -806,12 +819,12 @@
       "kind": "requirement",
       "text": "All engine state mutates on one tick goroutine; the stream reader, the management endpoint and the provider worker only enqueue onto bounded channels drained at tick start, mirroring the donor's between-tick command-spool drain; a full inbox is a named drop, never a lock held across a tick. [challenge / concurrency lens: engine.py _apply_commands drain; intents.py namespaced spool]",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h34",
           "text": "A race detector run (go test -race) over a test that hammers the stream, the management endpoint and the provider worker concurrently for 10,000 ticks reports no data race, and a full inbox shows as a named drop line.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -825,7 +838,7 @@
       "kind": "assumption",
       "text": "The stdio transport uses the same length-prefixed JSON framing on the child's stdin/stdout, so a consumer that spawns the engine as a child process gets lifecycle ownership for free (parent exit ends the engine) \u2014 this is the simplest answer to hard question q5 for consumers that own their process tree; senselog stays on stderr. [challenge / adjacent-systems lens: reachy_nova/kiro_acp.py drives an external binary over stdio; c28 names stdio]",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [],
       "hard_questions": [],
       "links": [],
@@ -837,12 +850,12 @@
       "kind": "requirement",
       "text": "Every stream and management frame carries a protocol version; a mismatch between the Python client and the engine is refused with a named error and the go build remediation, the same fail-closed rule schema_version applies to rules files. [challenge / migration lens: culture-nodes GET /v1alpha1/version + main.revision, issue #104 there]",
       "origin": "llm",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h35",
           "text": "A client frame with protocol version N+1 against an engine at N is refused with a structured error naming both versions and the go build remediation; the Python doctor check surfaces the same mismatch.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
