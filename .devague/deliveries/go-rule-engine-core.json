@@ -2,7 +2,7 @@
   "plan_slug": "go-rule-engine-core",
   "schema_version": 2,
   "created": "2026-09-05T06:07:14Z",
-  "updated": "2026-09-05T06:07:14Z",
+  "updated": "2026-09-05T07:22:48Z",
   "deviations": [
     {
       "id": "d1",
@@ -16,6 +16,21 @@
       "status": "proposed",
       "classification": null,
       "seq": 1
+    },
+    {
+      "id": "d2",
+      "what": "Three wiring follow-ups outside any task's summary, done as t13b on a fresh worktree after t13 merged: (1) a --provider flag in the composition root so the decision provider (t10) is reachable end to end \u2014 no task covered wiring it; (2) deterministic delivery of the settle pose before the end frame in the stream's shutdown ordering \u2014 t13 found the settle pose was best-effort; (3) an automated stdio-mode end-to-end test \u2014 t13 verified stdio manually only.",
+      "task_ref": "t13",
+      "reason": "gaps found at integration: provider wiring uncovered by the plan; settle-pose ordering and stdio coverage discovered by t13",
+      "affects": [
+        "t13",
+        "t10",
+        "t8"
+      ],
+      "origin": "llm",
+      "status": "proposed",
+      "classification": null,
+      "seq": 2
     }
   ],
   "evidence": [],

@@ -45,6 +45,21 @@ type Status struct {
 	// status rather than on faith.
 	RuleLayers int    `json:"rule_layers"`
 	ActiveMode string `json:"active_mode,omitempty"`
+
+	// Providers is each configured decision provider's accounting, keyed by
+	// its config name. It is here because a provider's failures are otherwise
+	// INVISIBLE by design: every one of them is an abstention, so an
+	// unreachable gateway looks exactly like a rule whose predicate never
+	// held. Requests without Results, or a Drops entry climbing, is the only
+	// way to tell "the model said no" from "the model was never reached".
+	Providers map[string]ProviderStatus `json:"providers,omitempty"`
+}
+
+// ProviderStatus is one provider's counters as `status` reports them.
+type ProviderStatus struct {
+	Requests uint64            `json:"requests"`
+	Results  uint64            `json:"results"`
+	Drops    map[string]uint64 `json:"drops,omitempty"`
 }
 
 // statusRider is a seam rider that records each tick's resolved state, and the
@@ -66,6 +81,10 @@ type statusRider struct {
 	engine *tick.Engine
 	server *stream.Server
 	lane   *rulesLane
+
+	// providers is fixed at composition and never mutated, so reading it needs
+	// no lock beyond the one Status already takes.
+	providers []namedProvider
 }
 
 // bind attaches the sources whose counters Status reports. It runs at
@@ -105,6 +124,7 @@ func (s *statusRider) Status() (any, error) {
 		out.UptimeS = s.now.Sub(s.startedAt).Seconds()
 	}
 	engine, server, lane := s.engine, s.server, s.lane
+	providers := s.providers
 	s.mu.Unlock()
 
 	if engine != nil {
@@ -119,6 +139,15 @@ func (s *statusRider) Status() (any, error) {
 	}
 	if lane != nil {
 		out.RuleLayers, out.ActiveMode = lane.Layers(), lane.ActiveMode()
+	}
+	if len(providers) > 0 {
+		out.Providers = make(map[string]ProviderStatus, len(providers))
+		for _, p := range providers {
+			stats := p.Provider.Stats()
+			out.Providers[p.Name] = ProviderStatus{
+				Requests: stats.Requests, Results: stats.Results, Drops: stats.Drops,
+			}
+		}
 	}
 	if out.Active == nil {
 		out.Active = []string{}

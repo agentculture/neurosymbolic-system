@@ -42,6 +42,7 @@ FIXTURES = Path(__file__).parent / "toy_robot"
 sys.path.insert(0, str(FIXTURES.parent))
 
 from toy_robot.client import ToyRobot  # noqa: E402
+from toy_robot.stdio_client import StdioToyRobot  # noqa: E402
 
 ENGINE_PATH = os.environ.get("NEUROSYMBOLIC_ENGINE")
 
@@ -61,6 +62,10 @@ HEARTBEAT_S = 0.1
 #: COMPLETE or it is a bug: an unclaimed channel falls to its declared neutral
 #: rather than being left out of the target.
 CHANNELS = {"wheels": 2, "beacon": 1, "arm": 3}
+
+#: The toy robot's neutral pose, from adaptor.toml — where an unclaimed channel
+#: falls, and what the engine settles to on the way out.
+NEUTRAL = {"wheels": [0.0, 0.0], "beacon": [0.0], "arm": [0.0, 0.0, 0.0]}
 
 
 def engine_args(*extra: str) -> list[str]:
@@ -99,7 +104,7 @@ def robot(tmp_path: Path) -> Any:
         bot.stop()
 
 
-def stream_senses(bot: ToyRobot, count: int, fields: dict[str, Any]) -> None:
+def stream_senses(bot: Any, count: int, fields: dict[str, Any]) -> None:
     """Publish ``count`` sense frames at the engine's own period."""
     for _ in range(count):
         bot.sense(dict(fields))
@@ -256,7 +261,91 @@ def test_a_protocol_mismatch_is_refused_naming_both_versions(tmp_path: Path) -> 
         bot.stop()
 
 
-# --- the fixture consumer must stay a consumer ------------------------------
+# --- the same engine, over a child's pipes ---------------------------------
+
+
+@requires_built_engine
+def test_stdio_transport_streams_poses_and_ends_on_sigterm() -> None:
+    """The identical wire, with no socket anywhere.
+
+    A consumer that spawns the engine gets lifecycle ownership for free — the
+    parent's exit closes the pipes — and there is no socket file, directory or
+    stale-socket cleanup to get wrong. This asserts the transport carries the
+    same guarantees the socket one does: a complete pose every tick, and an
+    end-of-stream frame naming its reason when the engine is asked to stop.
+
+    It also pins stdout's purity. stdout IS the wire here, so a single stray
+    diagnostic printed to it would desynchronise the framing permanently; every
+    frame decoding cleanly is that assertion.
+    """
+    settled: list[str] = []
+    bot = StdioToyRobot(
+        engine=str(ENGINE_PATH),
+        args=engine_args(),
+        settle=settled.append,
+        heartbeat_s=HEARTBEAT_S,
+    )
+    bot.start()
+    try:
+        bot.hello()
+        assert bot.wait_for("hello"), "the engine never greeted back over stdio"
+
+        stream_senses(bot, 50, {"bumper": True, "light_level": 0.2, "tag": "a"})
+
+        poses = bot.of_kind("pose")
+        assert len(poses) >= 40, f"only {len(poses)} pose frames arrived in ~1s at 50 Hz"
+        for frame in poses:
+            channels = frame["channels"]
+            assert set(channels) == set(CHANNELS), f"incomplete pose: {sorted(channels)}"
+            for name, arity in CHANNELS.items():
+                assert len(channels[name]) == arity, f"{name} carried {len(channels[name])} values"
+
+        bot.signal(signal.SIGTERM)
+        assert bot.wait_for("end", timeout=5.0), "no end-of-stream frame after SIGTERM"
+        assert bot.of_kind("end")[0]["reason"], "the end frame named no reason"
+        assert bot.settled and bot.settled[0].startswith("end:"), bot.settled
+    finally:
+        bot.stop()
+
+    # Every senselog line went to stderr, where an operator greps for it, and
+    # none of it reached the wire.
+    assert "[SENSE stage=compose" in bot.stderr.decode(errors="replace")
+
+
+@requires_built_engine
+def test_stdio_settle_pose_is_the_last_pose_before_the_end_frame() -> None:
+    """The shutdown's ordering contract, seen from a real consumer.
+
+    The engine writes one settling neutral pose as its loop exits so a robot is
+    not left holding whatever the last tick happened to compose. It rides the
+    ordinary bounded queue; the end frame does not. The endpoint drains the
+    queue before announcing the end precisely so a consumer's last word from
+    the robot is the settle — not a pose from before the stop.
+    """
+    bot = StdioToyRobot(engine=str(ENGINE_PATH), args=engine_args(), heartbeat_s=HEARTBEAT_S)
+    bot.start()
+    try:
+        bot.hello()
+        assert bot.wait_for("hello")
+        # Drive bump-retreat so the poses before the stop are NOT neutral, and
+        # "the last one is neutral" is a real assertion.
+        stream_senses(bot, 25, {"bumper": True, "light_level": 0.2, "tag": "a"})
+
+        bot.signal(signal.SIGTERM)
+        assert bot.wait_for("end", timeout=5.0), "no end-of-stream frame after SIGTERM"
+        time.sleep(0.1)  # let any trailing frame land before reading the log
+
+        frames = [f for f in bot.frames if f.get("kind") in ("pose", "end")]
+        end_at = next(i for i, f in enumerate(frames) if f["kind"] == "end")
+        assert end_at > 0, "the end frame arrived before any pose"
+        last_pose = frames[end_at - 1]
+        assert last_pose["kind"] == "pose", frames[end_at - 1]
+        assert last_pose["channels"] == NEUTRAL, last_pose["channels"]
+    finally:
+        bot.stop()
+
+
+# --- the fixture consumers must stay consumers ------------------------------
 
 #: Identifiers a consumer must never need. Each names a decision the engine
 #: makes: rule timing, contention, drop accounting, and refusing an
@@ -269,12 +358,18 @@ FORBIDDEN = ("cooldown", "hysteresis", "arbitrat", "senselog", "validate")
 #: the only way to keep it true as the engine grows.
 MAX_CLIENT_LINES = 200
 
+#: Every fixture consumer, each held to the same ceiling. A second transport
+#: got its own file rather than a mode on the first precisely because raising
+#: the ceiling to fit it in would have been quietly deleting the assertion.
+CLIENT_FILES = ("client.py", "stdio_client.py")
 
-def test_toy_client_stays_a_client() -> None:
-    source = (FIXTURES / "client.py").read_text()
+
+@pytest.mark.parametrize("filename", CLIENT_FILES)
+def test_toy_client_stays_a_client(filename: str) -> None:
+    source = (FIXTURES / filename).read_text()
 
     lines = len(source.splitlines())
-    assert lines <= MAX_CLIENT_LINES, f"client.py is {lines} lines, ceiling is {MAX_CLIENT_LINES}"
+    assert lines <= MAX_CLIENT_LINES, f"{filename} is {lines} lines, ceiling is {MAX_CLIENT_LINES}"
 
     # Grep the CODE, not the prose. Comments and docstrings explaining what a
     # consumer must not do are exactly what should be allowed to say these
@@ -286,4 +381,4 @@ def test_toy_client_stays_a_client() -> None:
     ]
     for identifier in FORBIDDEN:
         hits = [token for token in code if identifier in token.lower()]
-        assert not hits, f"client.py implements {identifier!r}: {hits}"
+        assert not hits, f"{filename} implements {identifier!r}: {hits}"
