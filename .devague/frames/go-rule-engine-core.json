@@ -2,9 +2,9 @@
   "slug": "go-rule-engine-core",
   "title": "Go rule engine core",
   "schema_version": 6,
-  "status": "drafting",
+  "status": "exported",
   "created": "2026-09-05T04:43:37Z",
-  "updated": "2026-09-05T05:14:15Z",
+  "updated": "2026-09-05T05:18:36Z",
   "claims": [
     {
       "id": "c1",
@@ -16,7 +16,7 @@
         {
           "id": "h16",
           "text": "A fresh consumer \u2014 the fixture toy robot in this repo's tests, neither Reachy nor MicroDuck \u2014 goes from zero to a running rules-driven pose stream using only the built binary, a channel / sense / action config, and a TOML rules file, with no engine code written.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -30,7 +30,7 @@
       "kind": "requirement",
       "text": "The core is written in Go and ships as one static binary for on-device use; robot CLIs stay Python and drive it, as culture-nodes' Python nodes CLI drives its Go control plane.",
       "origin": "user",
-      "status": "proposed",
+      "status": "confirmed",
       "honesty_conditions": [
         {
           "id": "h1",
@@ -117,7 +117,7 @@
         {
           "id": "h17",
           "text": "Measured on linux/arm64 and recorded under docs/verification: steady-state RSS of the engine under a 200-rule, 20-field load stays under a published ceiling (proposed 32 MB), and per-tick evaluation stays inside the configured budget with zero overruns over 10,000 ticks; both numbers are printed by an 'engine bench' verb.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -136,7 +136,7 @@
         {
           "id": "h18",
           "text": "A robot CLI maintainer can integrate from the README's adaptor guide alone, and a rules author can validate a file with 'rules check' with no robot attached and no engine running; both paths are exercised by tests.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -334,7 +334,7 @@
         {
           "id": "h19",
           "text": "go list -deps of the engine command contains no robot SDK, transport or media package; a test asserts an import allowlist (stdlib plus this module) and fails on any addition.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -353,7 +353,7 @@
         {
           "id": "h20",
           "text": "The decision provider client is warmed at startup and called from a worker behind a bounded queue; a fixture provider that sleeps 2 s produces zero tick overruns and exactly one named drop line per abstention.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -380,7 +380,7 @@
         {
           "id": "h21",
           "text": "The Go binary's whoami / doctor / version verbs emit error: and hint: lines on stderr, results on stdout, exit 0 / 1 / 2, and honor --json \u2014 asserted by the same contract tests the Python CLI already runs.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -399,7 +399,7 @@
         {
           "id": "h22",
           "text": "The engine ships no motion primitive: an action is an opaque name plus params validated against the adaptor's declared domain, and the fixture sink receives the name and params unchanged.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -454,7 +454,7 @@
         {
           "id": "h23",
           "text": "The cited counts hold at the recorded commits: reachy-mini-cli behavior/ + motion/ about 20k lines with 18 files importing reachy.cli._errors or reachy.daemon; microduck-cli behavior/ requiring schema_version = 1; arm101-cli with no behavior package \u2014 re-verifiable by wc and grep at those commits.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -473,7 +473,7 @@
         {
           "id": "h24",
           "text": "The fixture toy robot adaptor in tests/ is under 200 lines and contains no arbitration, validation, timing or drop-logging code of its own.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -492,7 +492,7 @@
         {
           "id": "h25",
           "text": "A conformance fixture set derived from both donors' rule tests (rules file + sense trace in, expected fire / suppress / pose trace out) replays byte-identically through the engine; the consumer-side swap is explicitly out of scope and listed as the consumers' work.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -517,7 +517,7 @@
         {
           "id": "h26",
           "text": "An 'engine bench' verb prints tick p50 / p99 and overrun count for the 200-rule / 20-field load plus steady-state RSS, and one recorded run on an arm64 box is committed under docs/verification with the commit sha.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -609,7 +609,7 @@
         {
           "id": "h27",
           "text": "No commit in this work touches a path outside this repository; every sibling-facing need is filed as an issue through the communicate skill and listed in the delivery summary.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
@@ -628,7 +628,7 @@
         {
           "id": "h28",
           "text": "The engine performs no motor-level collision or limit check; motor-state rules work only when the adaptor declares those fields as senses, and the adaptor guide states that the fast path for motor safety is the consumer's motor-control surface.",
-          "status": "proposed",
+          "status": "confirmed",
           "instruction": ""
         }
       ],
