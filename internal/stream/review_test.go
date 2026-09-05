@@ -466,3 +466,108 @@ func TestAClientNameAtTheLimitIsAcceptedVerbatim(t *testing.T) {
 		}
 	}
 }
+
+// --- finding 4: management work in flight is bounded ------------------------
+
+// TestConcurrentManagementFramesAreBounded.
+//
+// handleMgmt answers on its own goroutine so a slow verb cannot pause the
+// reader or the tick — but it started one goroutine per valid frame, each
+// holding a copy of a body up to MaxFrameBytes. A client sending management
+// frames faster than the handler retires them therefore had an unbounded lever
+// on the robot's memory and scheduler, from one socket, after a handshake that
+// costs nothing. Bounding it turns that into what every other saturation in
+// this runtime is: a named refusal the client can read, and a named drop the
+// operator can grep.
+func TestConcurrentManagementFramesAreBounded(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	const limit = 4
+	const sent = 20
+	release := make(chan struct{})
+	entered := make(chan struct{}, sent)
+	handler := funcMgmt(func(json.RawMessage) json.RawMessage {
+		entered <- struct{}{}
+		<-release
+		return json.RawMessage(`{"ok":true}`)
+	})
+	r := newRig(t, func(c *Config) { c.MaxInflightMgmt = limit }, handler)
+	r.start(ctx)
+
+	client, _ := r.dial()
+	client.handshake()
+	for i := 0; i < sent; i++ {
+		client.send(map[string]any{
+			"v": Version, "kind": KindMgmt, "id": fmt.Sprintf("m%d", i), "verb": "version",
+		})
+	}
+
+	// The refusals arrive while the handlers are parked, so they are readable
+	// before anything is released.
+	refused := 0
+	for refused < sent-limit {
+		frame := client.recvKind(KindError)
+		message, _ := frame["message"].(string)
+		if !strings.Contains(message, strconv.Itoa(limit)) {
+			t.Errorf("the refusal %q does not name the %d-request limit", message, limit)
+		}
+		if frame["id"] == nil || frame["id"] == "" {
+			t.Errorf("the refusal does not correlate with a request: %+v", frame)
+		}
+		refused++
+	}
+
+	// Exactly `limit` handlers ever ran.
+	if got := len(entered); got != limit {
+		t.Errorf("%d handlers ran concurrently, want at most %d", got, limit)
+	}
+	close(release)
+	for i := 0; i < limit; i++ {
+		client.recvKind(KindMgmtResult)
+	}
+
+	if !strings.Contains(r.logText(), "reason=mgmt-busy") {
+		t.Errorf("the refusals were not named as drops in the log:\n%s", r.logText())
+	}
+}
+
+// A retired request frees its slot: the bound is on work IN FLIGHT, not a
+// per-session quota.
+func TestAManagementSlotIsFreedWhenTheVerbFinishes(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	handler := funcMgmt(func(json.RawMessage) json.RawMessage {
+		return json.RawMessage(`{"ok":true}`)
+	})
+	r := newRig(t, func(c *Config) { c.MaxInflightMgmt = 1 }, handler)
+	r.start(ctx)
+
+	client, _ := r.dial()
+	client.handshake()
+	for i := 0; i < 10; i++ {
+		client.send(map[string]any{
+			"v": Version, "kind": KindMgmt, "id": fmt.Sprintf("m%d", i), "verb": "version",
+		})
+		frame := client.recvKind(KindMgmtResult)
+		if frame["id"] != fmt.Sprintf("m%d", i) {
+			t.Fatalf("request %d was answered as %v", i, frame["id"])
+		}
+	}
+}
+
+// The default is a bound, not "unlimited": a consumer that names no limit still
+// gets one.
+func TestTheDefaultManagementBoundIsSet(t *testing.T) {
+	cfg := Config{Dir: t.TempDir()}
+	if err := cfg.normalize(false); err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	if cfg.MaxInflightMgmt != DefaultMaxInflightMgmt {
+		t.Errorf("MaxInflightMgmt defaulted to %d, want %d",
+			cfg.MaxInflightMgmt, DefaultMaxInflightMgmt)
+	}
+	if DefaultMaxInflightMgmt <= 0 {
+		t.Errorf("DefaultMaxInflightMgmt = %d; an unbounded default is the bug",
+			DefaultMaxInflightMgmt)
+	}
+}

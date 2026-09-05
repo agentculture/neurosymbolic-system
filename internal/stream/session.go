@@ -53,6 +53,13 @@ type session struct {
 	// greeted is touched only by the reader goroutine.
 	greeted bool
 
+	// mgmtInflight counts the management verbs running on their own
+	// goroutines. It is bumped by the reader goroutine before the goroutine
+	// starts and dropped by that goroutine when it retires, so the reader's
+	// decision to refuse is made against a count that already includes the
+	// frame in hand.
+	mgmtInflight atomic.Int64
+
 	// subscribed flips to true only after the hello REPLY has been written.
 	// Telemetry (pose, event, heartbeat) is enqueued from the tick goroutine
 	// from the moment a session exists, so without this gate a tick that lands
@@ -580,9 +587,28 @@ func (s *session) handleMgmt(body []byte) bool {
 				"one-off exec path", in.ID))
 		return true
 	}
+	// One goroutine per frame is what makes a slow verb harmless; UNBOUNDED
+	// goroutines per frame is what makes a fast client dangerous, since each
+	// also holds a body copy of up to MaxFrameBytes. Refuse past the bound with
+	// a named reason rather than queueing: a queue only moves the same
+	// unboundedness somewhere else, and an operator waiting on an answer would
+	// rather be told the endpoint is busy.
+	limit := int64(s.srv.cfg.MaxInflightMgmt)
+	if s.mgmtInflight.Add(1) > limit {
+		s.mgmtInflight.Add(-1)
+		s.srv.drop(KindMgmt, "mgmt-busy", fmt.Sprintf(
+			"%d management verbs are already running on this session", limit))
+		_ = s.send(newError(CodeEnv, fmt.Sprintf(
+			"this session already has %d management verbs in flight, which is the limit",
+			limit),
+			"wait for a result and retry; management work is bounded so a burst of "+
+				"requests cannot cost the robot its memory or its scheduler", in.ID))
+		return true
+	}
 	raw := make(json.RawMessage, len(body))
 	copy(raw, body)
 	go func() {
+		defer s.mgmtInflight.Add(-1)
 		result := s.srv.mgmt.HandleJSON(raw)
 		if len(result) == 0 {
 			result = json.RawMessage("null")
